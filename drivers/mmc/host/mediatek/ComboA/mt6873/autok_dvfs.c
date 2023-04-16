@@ -448,6 +448,20 @@ int sd_execute_dvfs_autok(struct msdc_host *host, u32 opcode)
 		}
 	}
 
+		/* Distinguish mmc by timing */
+	if (host->mmc->ios.timing == MMC_TIMING_MMC_HS200) {
+#ifdef MSDC_HQA
+		msdc_HQA_set_voltage(host);
+#endif
+		if (opcode == MMC_SEND_STATUS) {
+			pr_notice("[AUTOK]MMC HS200 Tune CMD only\n");
+			ret = hs200_execute_tuning_cmd(host, res);
+		} else {
+			pr_notice("[AUTOK]MMC HS200 Tune\n");
+			ret = hs200_execute_tuning(host, res);
+		}
+	}
+
 	return ret;
 }
 
@@ -848,11 +862,11 @@ void sdio_execute_dvfs_autok(struct msdc_host *host)
 }
 
 #if defined(VCOREFS_READY)
+/* remove 0.575v,or it will affect 90HZ LCM */
 static int autok_opp[AUTOK_VCORE_NUM] = {
-	VCORE_DVFS_OPP_2, /* 0.825V, OPP_0 is invalid */
-
-	VCORE_DVFS_OPP_6, /* 0.725V */
-	VCORE_DVFS_OPP_9, /* 0.65V */
+	VCORE_DVFS_OPP_3, /* 0.725V */
+	VCORE_DVFS_OPP_4, /* 0.650V */
+	VCORE_DVFS_OPP_5, /* 0.600V */
 };
 #endif
 
@@ -982,10 +996,6 @@ int emmc_autok(void)
 		reg_vcore = devm_regulator_get_optional(mmc_dev(host->mmc),
 							"vcore");
 		vcore_step2 = regulator_get_voltage(reg_vcore);
-		if (vcore_step2 == -1) {
-			pr_notice("WARN:%s:get voltage fail\n", __func__);
-			return -1;
-		}
 		pr_notice("msdc fix vcore: %d\n", vcore_step2);
 
 		if (vcore_step2 == vcore_step1) {

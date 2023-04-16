@@ -35,6 +35,11 @@
 #define DCMD_SLOT 31
 #define NUM_SLOTS 32
 
+#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_HEALTHINFO)
+// Add for record emmc  driver iowait
+#include <soc/oplus/oppo_healthinfo.h>
+#endif
+
 /* 1 sec */
 #define HALT_TIMEOUT_MS 1000
 
@@ -695,6 +700,11 @@ ring_doorbell:
 
 	/* Ensure the task descriptor list is flushed before ringing doorbell */
 	wmb();
+
+#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_HEALTHINFO)
+    mrq->cmdq_request_time_start = ktime_get();
+#endif
+	
 	cmdq_writel(cq_host, 1 << tag, CQTDBR);
 	/* Commit the doorbell write immediately */
 	wmb();
@@ -734,9 +744,14 @@ static void cmdq_finish_data(struct mmc_host *mmc, unsigned int tag)
 	mrq->done(mrq);
 }
 
+#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_HEALTHINFO)
+// Add for record  emmc  driver iowait
+extern int ohm_flash_type;
+#endif
+
 irqreturn_t cmdq_irq(struct mmc_host *mmc, int err)
 {
-	u32 status = 0;
+	u32 status = 0, task_mask = 0;
 	unsigned long tag = 0, comp_status = 0, cmd_idx = 0;
 	struct cmdq_host *cq_host = (struct cmdq_host *)mmc_cmdq_private(mmc);
 	unsigned long err_info = 0;
@@ -790,7 +805,6 @@ _err:
 		if (err_info & CQ_RMEFV) {
 			cmd_idx = GET_CMD_ERR_CMDIDX(err_info);
 			if (cmd_idx == MMC_SEND_STATUS) {
-				u32 task_mask;
 				/*
 				 * since CMD13 does not belong to
 				 * any tag, just find an active
@@ -820,6 +834,33 @@ _err:
 
 			mrq = get_req_by_tag(cq_host, tag);
 			mrq->data->error = err;
+		} else {
+			/*
+			 * It may so happen sometimes for few errors(like QSR)
+			 * Thus below is a HW WA for recovering from such
+			 * scenario.
+			 * - To halt/disable CQE and do reset_all.
+			 *   Since there is no way to know which tag would
+			 *   have caused such error, so check for any first
+			 *   bit set in doorbell and proceed with an error.
+			 */
+			task_mask = cmdq_readl(cq_host, CQTDBR);
+			if (!task_mask) {
+				pr_notice("%s: spurious/force error interrupt\n",
+						mmc_hostname(mmc));
+				cmdq_halt_poll(mmc, false);
+				mmc_host_clr_halt(mmc);
+				return IRQ_HANDLED;
+			}
+
+			tag = uffs(task_mask) - 1;
+			pr_notice("%s: error tag selected: tag = %lu\n",
+					mmc_hostname(mmc), tag);
+			mrq = get_req_by_tag(cq_host, tag);
+			if (mrq->data)
+				mrq->data->error = err;
+			else
+				mrq->cmd->error = err;
 		}
 
 		/*
@@ -896,6 +937,13 @@ _err:
 		 */
 		for_each_set_bit(tag, &comp_status, cq_host->num_slots) {
 			/* complete the corresponding mrq */
+#if defined(VENDOR_EDIT) && defined(CONFIG_OPPO_HEALTHINFO)
+        // Add for record emmc driver io wait
+        if (OHM_FLASH_TYPE_EMC == ohm_flash_type) {
+            ohm_schedstats_record(OHM_SCHED_EMMCIO, current,
+                ktime_ms_delta(ktime_get(), mrq->cmdq_request_time_start));
+        }
+#endif
 #ifdef MMC_CQHCI_DEBUG
 			pr_debug("%s: %s completing tag -> %lu\n",
 				 mmc_hostname(mmc), __func__, tag);

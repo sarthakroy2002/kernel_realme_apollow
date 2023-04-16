@@ -67,7 +67,15 @@
 #include "mmc/host/cmdq_hci.h"
 #endif
 
+//#if OPLUS_BUG_COMPATIBILITY
+//2020/10/30 reocvery mode open cmdq function for reocvery FBE failed
+#include <soc/oplus/system/oplus_project.h>
+
 #include "dbg.h"
+
+#ifdef VENDOR_EDIT
+#include <linux/reboot.h>
+#endif
 
 #define CAPACITY_2G             (2 * 1024 * 1024 * 1024ULL)
 
@@ -1169,10 +1177,22 @@ static int check_enable_cqe(void)
 	 * Device will return switch error if flush cache
 	 * with cache disabled.
 	 */
-	if ((mode == RECOVERY_BOOT) ||
-		(mode == KERNEL_POWER_OFF_CHARGING_BOOT) ||
-		(mode == LOW_POWER_OFF_CHARGING_BOOT))
-		return 0;
+//#if OPLUS_BUG_COMPATIBILITY
+//2020/10/30 reocvery mode open cmdq function for reocvery FBE failed
+    if((get_project() == 0x206AC) || (get_project() == 19741) || (get_project() == 19747)){
+		if ((mode == KERNEL_POWER_OFF_CHARGING_BOOT) ||
+			(mode == LOW_POWER_OFF_CHARGING_BOOT))
+			return 0;
+	}else{
+		if ((mode == RECOVERY_BOOT) ||
+			(mode == KERNEL_POWER_OFF_CHARGING_BOOT) ||
+			(mode == LOW_POWER_OFF_CHARGING_BOOT))
+			return 0;
+	}
+//	if ((mode == RECOVERY_BOOT) ||
+//		(mode == KERNEL_POWER_OFF_CHARGING_BOOT) ||
+//		(mode == LOW_POWER_OFF_CHARGING_BOOT))
+//		return 0;
 
 	return 1;
 #else
@@ -1193,13 +1213,31 @@ static int msdc_cache_onoff(struct mmc_data *data)
 	 * disable cache in recovery and charger modes
 	 */
 	mode = get_boot_mode();
-	if ((mode == RECOVERY_BOOT) ||
-		(mode == KERNEL_POWER_OFF_CHARGING_BOOT) ||
-		(mode == LOW_POWER_OFF_CHARGING_BOOT)) {
+//#if OPLUS_BUG_COMPATIBILITY
+//2020/10/30 reocvery mode open cmdq function for reocvery FBE failed
+    if((get_project() == 0x206AC) || (get_project() == 19741) || (get_project() == 19747)){
+	    if ((mode == KERNEL_POWER_OFF_CHARGING_BOOT) ||
+		    (mode == LOW_POWER_OFF_CHARGING_BOOT)) {
 		/* Set cache_size as 0 so that mmc layer won't enable cache */
-		*(ptr + 252) = *(ptr + 251) = *(ptr + 250) = *(ptr + 249) = 0;
-		return 0;
+		    *(ptr + 252) = *(ptr + 251) = *(ptr + 250) = *(ptr + 249) = 0;
+		    return 0;
+	    }
+	}else{
+	    if ((mode == RECOVERY_BOOT) ||
+		    (mode == KERNEL_POWER_OFF_CHARGING_BOOT) ||
+		    (mode == LOW_POWER_OFF_CHARGING_BOOT)) {
+		/* Set cache_size as 0 so that mmc layer won't enable cache */
+		    *(ptr + 252) = *(ptr + 251) = *(ptr + 250) = *(ptr + 249) = 0;
+		    return 0;
+	    }
 	}
+//	if ((mode == RECOVERY_BOOT) ||
+//		(mode == KERNEL_POWER_OFF_CHARGING_BOOT) ||
+//		(mode == LOW_POWER_OFF_CHARGING_BOOT)) {
+//		/* Set cache_size as 0 so that mmc layer won't enable cache */
+//		*(ptr + 252) = *(ptr + 251) = *(ptr + 250) = *(ptr + 249) = 0;
+//		return 0;
+//	}
 	/*
 	 * Enable cache by eMMC vendor
 	 * disable emmc cache if eMMC vendor is in emmc_cache_quirk[]
@@ -1780,6 +1818,13 @@ skip_cmd_resp_polling:
 "[%s]: msdc%d XXX CMD<%d> resp<0x%.8x>, write protection violation\n",
 							__func__, host->id,
 							cmd->opcode, *rsp);
+#ifdef VENDOR_EDIT
+					if((host->hw->host_function == MSDC_EMMC) &&
+					   ( get_boot_mode() == RECOVERY_BOOT || get_boot_mode() == OPPO_SAU_BOOT ))
+					{
+						emergency_restart();
+					}
+#endif
 				}
 
 				if ((*rsp & R1_OUT_OF_RANGE)
@@ -2578,6 +2623,7 @@ static void msdc_dma_start(struct msdc_host *host)
 		wints |= MSDC_INT_ACMDCRCERR | MSDC_INT_ACMDTMO
 			| MSDC_INT_ACMDRDY;
 	MSDC_SET_FIELD(MSDC_DMA_CTRL, MSDC_DMA_CTRL_START, 1);
+	atomic_set(&host->dma_status, 1);
 
 	spin_lock_irqsave(&host->reg_lock, flags);
 	MSDC_SET_BIT32(MSDC_INTEN, wints);
@@ -2627,6 +2673,7 @@ static void msdc_dma_stop(struct msdc_host *host)
 	if (retry == 0)
 		ERR_MSG("DMA stop retry timeout");
 
+	atomic_set(&host->dma_status, 0);
 	spin_lock_irqsave(&host->reg_lock, flags);
 	MSDC_CLR_BIT32(MSDC_INTEN, wints); /* Not just xfer_comp */
 	spin_unlock_irqrestore(&host->reg_lock, flags);
@@ -3683,13 +3730,22 @@ start_tune:
 #if defined(CONFIG_MTK_EMMC_CQ_SUPPORT) || defined(CONFIG_MTK_EMMC_HW_CQ)
 			/* CQ DAT tune in MMC layer, here tune CMD13 CRC */
 			if (mmc->card && mmc_card_cmdq(mmc->card))
+#ifndef EMMC_RUNTIME_AUTOK_MERGE
 				emmc_execute_dvfs_autok(host, MMC_SEND_STATUS);
+#else
+				emmc_runtime_autok_merge(MMC_SEND_STATUS);
+#endif
 			else
 #endif
 			{
 				if (host->hw->host_function == MSDC_EMMC)
+#ifndef EMMC_RUNTIME_AUTOK_MERGE
 					emmc_execute_dvfs_autok(host,
 						MMC_SEND_TUNING_BLOCK_HS200);
+#else
+					emmc_runtime_autok_merge(
+						MMC_SEND_TUNING_BLOCK_HS200);
+#endif
 				else if (host->hw->host_function == MSDC_SD)
 					sd_execute_dvfs_autok(host,
 						MMC_SEND_TUNING_BLOCK_HS200);
@@ -4388,7 +4444,8 @@ void msdc_ops_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		&& ios->timing != MMC_TIMING_LEGACY) {
 			msdc_restore_timing_setting(host);
 			pr_notice("[AUTOK]eMMC restored timing setting\n");
-		} else if (ios->timing == MMC_TIMING_MMC_HS400) {
+		} else if (ios->timing == MMC_TIMING_MMC_HS400 &&
+			ios->clock > 52000000) {
 			msdc_execute_tuning(host->mmc,
 				MMC_SEND_TUNING_BLOCK_HS200);
 			mmc_retune_disable(host->mmc);
@@ -5174,8 +5231,12 @@ static int msdc_cqhci_reset(struct mmc_host *mmc)
 	if (cq_host && cq_host->enabled)
 		pr_notice("WARN: data xf with cqhci enabled\n");
 
-	ret = emmc_execute_dvfs_autok(host,
-		MMC_SEND_TUNING_BLOCK_HS200);
+#ifndef EMMC_RUNTIME_AUTOK_MERGE
+		ret = emmc_execute_dvfs_autok(host, MMC_SEND_TUNING_BLOCK_HS200);
+#else
+		ret = emmc_runtime_autok_merge(MMC_SEND_TUNING_BLOCK_HS200);
+#endif
+
 
 	/* clear flag */
 	host->need_tune = TUNE_NONE;
@@ -5475,6 +5536,8 @@ static int msdc_drv_remove(struct platform_device *pdev)
 		clk_disable_unprepare(host->ahb2axi_brg_clk_ctl);
 	if (host->pclk_ctl)
 		clk_disable_unprepare(host->pclk_ctl);
+	if (host->src_hclk_ctl)
+		clk_disable_unprepare(host->src_hclk_ctl);
 #endif
 	pm_qos_remove_request(&host->msdc_pm_qos_req);
 	pm_runtime_disable(&pdev->dev);
@@ -5512,6 +5575,8 @@ static int msdc_runtime_suspend(struct device *dev)
 		clk_disable_unprepare(host->ahb2axi_brg_clk_ctl);
 	if (host->pclk_ctl)
 		clk_disable_unprepare(host->pclk_ctl);
+	if (host->src_hclk_ctl)
+		clk_disable_unprepare(host->src_hclk_ctl);
 
 	pm_qos_update_request(&host->msdc_pm_qos_req,
 		PM_QOS_DEFAULT_VALUE);
@@ -5527,6 +5592,8 @@ static int msdc_runtime_resume(struct device *dev)
 
 	pm_qos_update_request(&host->msdc_pm_qos_req, 0);
 
+	if (host->src_hclk_ctl)
+		(void)clk_prepare_enable(host->src_hclk_ctl);
 	if (host->pclk_ctl)
 		(void)clk_prepare_enable(host->pclk_ctl);
 	if (host->axi_clk_ctl)

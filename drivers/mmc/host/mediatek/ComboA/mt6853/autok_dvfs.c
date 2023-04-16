@@ -448,13 +448,26 @@ int sd_execute_dvfs_autok(struct msdc_host *host, u32 opcode)
 		}
 	}
 
+		/* Distinguish mmc by timing */
+	if (host->mmc->ios.timing == MMC_TIMING_MMC_HS200) {
+#ifdef MSDC_HQA
+		msdc_HQA_set_voltage(host);
+#endif
+		if (opcode == MMC_SEND_STATUS) {
+			pr_notice("[AUTOK]MMC HS200 Tune CMD only\n");
+			ret = hs200_execute_tuning_cmd(host, res);
+		} else {
+			pr_notice("[AUTOK]MMC HS200 Tune\n");
+			ret = hs200_execute_tuning(host, res);
+		}
+	}
 	return ret;
 }
 
 int emmc_execute_dvfs_autok(struct msdc_host *host, u32 opcode)
 {
 	int ret = 0;
-	int vcore = 0;
+	int vcore = AUTOK_VCORE_MERGE;
 	u8 *res;
 
 #if defined(VCOREFS_READY)
@@ -848,11 +861,11 @@ void sdio_execute_dvfs_autok(struct msdc_host *host)
 }
 
 #if defined(VCOREFS_READY)
+/* remove 0.575v,or it will affect 90HZ LCM */
 static int autok_opp[AUTOK_VCORE_NUM] = {
-	VCORE_DVFS_OPP_2, /* 0.825V, OPP_0 is invalid */
-
-	VCORE_DVFS_OPP_6, /* 0.725V */
-	VCORE_DVFS_OPP_9, /* 0.65V */
+	VCORE_DVFS_OPP_3, /* 0.725V */
+	VCORE_DVFS_OPP_4, /* 0.650V */
+	VCORE_DVFS_OPP_5, /* 0.600V */
 };
 #endif
 
@@ -893,23 +906,89 @@ int sd_runtime_autok_merge(struct msdc_host *host)
 {
 	int merge_result, merge_mode, merge_window, merge_count;
 	int i, ret = 0;
-	u8 *res;
+	u8 *res = host->autok_res[AUTOK_VCORE_LEVEL1];
 
-	for (merge_count = 1; merge_count < AUTOK_VCORE_NUM; merge_count++) {
-		if (host->autok_res[merge_count][0] == NULL) {
-			pr_info("[AUTOK]merge_count = %d\n", merge_count+1);
-			res = host->autok_res[merge_count];
-			ret = autok_execute_tuning(host, res);
-			break;
-		}
-	}
+	ret = autok_execute_tuning(host, res);
 
 	merge_mode = MERGE_HS200_SDR104;
 	merge_result = autok_vcore_merge_sel(host, merge_mode);
 	for (i = CMD_MAX_WIN; i <= H_CLK_TX_MAX_WIN; i++) {
 		merge_window = host->autok_res[AUTOK_VCORE_MERGE][i];
-		if (merge_window < AUTOK_MERGE_MIN_WIN)
-			merge_result = -1;
+		if (merge_window < AUTOK_MERGE_MIN_WIN) {
+			merge_result = -2;
+			pr_info("[AUTOK]%s:merge_window[%d] less than %d\n",
+				__func__, i, AUTOK_MERGE_MIN_WIN);
+		}
+		if (merge_window != 0xFF)
+			pr_info("[AUTOK]merge_value = %d\n", merge_window);
+	}
+
+	if (merge_result == 0) {
+		autok_tuning_parameter_init(host,
+			host->autok_res[AUTOK_VCORE_MERGE]);
+		memcpy(host->autok_res[AUTOK_VCORE_LEVEL0],
+			host->autok_res[AUTOK_VCORE_MERGE],
+				TUNING_PARA_SCAN_COUNT);
+		pr_info("[AUTOK]No need change para when dvfs\n");
+	} else if (merge_result == -1) {
+		autok_tuning_parameter_init(host,
+			host->autok_res[AUTOK_VCORE_LEVEL0]);
+	} else if (merge_result == -2) {
+		autok_tuning_parameter_init(host,
+			host->autok_res[AUTOK_VCORE_LEVEL1]);
+		memcpy(host->autok_res[AUTOK_VCORE_LEVEL0],
+			host->autok_res[AUTOK_VCORE_LEVEL1],
+				TUNING_PARA_SCAN_COUNT);
+	}
+	return ret;
+}
+#endif
+
+#ifdef EMMC_RUNTIME_AUTOK_MERGE
+int emmc_runtime_autok_merge(u32 opcode)
+{
+#if !defined(FPGA_PLATFORM)
+	struct msdc_host *host = mtk_msdc_host[0];
+	void __iomem *base;
+	int merge_result, merge_mode, merge_window;
+	int i, ret = 0;
+
+	if (!(host->mmc->caps2 & MMC_CAP2_HS400_1_8V)
+	 && !(host->mmc->caps2 & MMC_CAP2_HS200_1_8V_SDR)) {
+		return ret;
+	}
+	pr_info("emmc runtime autok merge\n");
+	base = host->base;
+
+#ifdef CONFIG_MTK_EMMC_HW_CQ
+	if (emmc_autok_switch_cqe(host, 0))
+		pr_notice("WARN:%s:cqe disable fail", __func__);
+#endif
+	memcpy(host->autok_res[AUTOK_VCORE_LEVEL0],
+		host->autok_res[AUTOK_VCORE_MERGE],
+			TUNING_PARA_SCAN_COUNT);
+
+	ret = emmc_execute_dvfs_autok(host, opcode);
+	if (opcode == MMC_SEND_STATUS)
+		goto skip_autok_merge;
+	if (host->use_hw_dvfs == 0)
+		memcpy(host->autok_res[AUTOK_VCORE_LEVEL1],
+			host->autok_res[AUTOK_VCORE_MERGE],
+				TUNING_PARA_SCAN_COUNT);
+
+	if (host->mmc->ios.timing == MMC_TIMING_MMC_HS400)
+		merge_mode = MERGE_HS400;
+	else
+		merge_mode = MERGE_HS200_SDR104;
+
+	merge_result = autok_vcore_merge_sel(host, merge_mode);
+	for (i = CMD_MAX_WIN; i <= H_CLK_TX_MAX_WIN; i++) {
+		merge_window = host->autok_res[AUTOK_VCORE_MERGE][i];
+		if (merge_window < AUTOK_MERGE_MIN_WIN) {
+			merge_result = -2;
+			pr_info("[AUTOK]%s:merge_window[%d] less than %d\n",
+				__func__, i, AUTOK_MERGE_MIN_WIN);
+		}
 		if (merge_window != 0xFF)
 			pr_info("[AUTOK]merge_value = %d\n", merge_window);
 	}
@@ -918,12 +997,29 @@ int sd_runtime_autok_merge(struct msdc_host *host)
 		autok_tuning_parameter_init(host,
 			host->autok_res[AUTOK_VCORE_MERGE]);
 		pr_info("[AUTOK]No need change para when dvfs\n");
-	} else {
-		/* merge fail clear host->autok_res[merge_count][0] */
-		host->autok_res[merge_count][0] = NULL;
-		autok_tuning_parameter_init(host,
-			host->autok_res[AUTOK_VCORE_LEVEL0]);
+	} else if (host->use_hw_dvfs == 1) {
+		pr_info("[AUTOK]Need change para when dvfs\n");
+	} else if (host->use_hw_dvfs == 0) {
+		if (merge_result == -1)
+			autok_tuning_parameter_init(host,
+				host->autok_res[AUTOK_VCORE_LEVEL0]);
+		else if (merge_result == -2) {
+			autok_tuning_parameter_init(host,
+				host->autok_res[AUTOK_VCORE_LEVEL1]);
+			memcpy(host->autok_res[AUTOK_VCORE_MERGE],
+				host->autok_res[AUTOK_VCORE_LEVEL1],
+					TUNING_PARA_SCAN_COUNT);
+		}
+		pr_info("[AUTOK]restore legacy window\n");
 	}
+
+skip_autok_merge:
+#ifdef CONFIG_MTK_EMMC_HW_CQ
+	if (emmc_autok_switch_cqe(host, 1))
+		pr_notice("WARN:%s:cqe enable fail", __func__);
+#endif
+
+#endif
 
 	return ret;
 }
@@ -982,10 +1078,6 @@ int emmc_autok(void)
 		reg_vcore = devm_regulator_get_optional(mmc_dev(host->mmc),
 							"vcore");
 		vcore_step2 = regulator_get_voltage(reg_vcore);
-		if (vcore_step2 == -1) {
-			pr_notice("WARN:%s:get voltage fail\n", __func__);
-			return -1;
-		}
 		pr_notice("msdc fix vcore: %d\n", vcore_step2);
 
 		if (vcore_step2 == vcore_step1) {

@@ -16,7 +16,6 @@
 #include <linux/buffer_head.h>
 #include <linux/delay.h>
 #include <linux/fs.h>
-#include <linux/regulator/consumer.h>
 
 #include "autok_dvfs.h"
 #include "mtk_sd.h"
@@ -428,7 +427,7 @@ void sdio_autok_wait_dvfs_ready(void)
 int sd_execute_dvfs_autok(struct msdc_host *host, u32 opcode)
 {
 	int ret = 0;
-	int vcore = AUTOK_VCORE_MERGE;
+	int vcore = 0;
 	u8 *res;
 
 	res = host->autok_res[vcore];
@@ -438,9 +437,6 @@ int sd_execute_dvfs_autok(struct msdc_host *host, u32 opcode)
 		if (host->is_autok_done == 0) {
 			pr_notice("[AUTOK]SDcard autok\n");
 			ret = autok_execute_tuning(host, res);
-			memcpy(host->autok_res[AUTOK_VCORE_LEVEL0],
-					host->autok_res[AUTOK_VCORE_MERGE],
-					TUNING_PARA_SCAN_COUNT);
 			host->is_autok_done = 1;
 		} else {
 			autok_init_sdr104(host);
@@ -450,6 +446,7 @@ int sd_execute_dvfs_autok(struct msdc_host *host, u32 opcode)
 
 	return ret;
 }
+
 
 int emmc_execute_dvfs_autok(struct msdc_host *host, u32 opcode)
 {
@@ -849,10 +846,10 @@ void sdio_execute_dvfs_autok(struct msdc_host *host)
 
 #if defined(VCOREFS_READY)
 static int autok_opp[AUTOK_VCORE_NUM] = {
-	VCORE_DVFS_OPP_2, /* 0.825V, OPP_0 is invalid */
-
-	VCORE_DVFS_OPP_6, /* 0.725V */
-	VCORE_DVFS_OPP_9, /* 0.65V */
+	VCORE_DVFS_OPP_1, /* 0.8V */
+	VCORE_DVFS_OPP_8, /* 0.7V */
+	VCORE_DVFS_OPP_13, /* 0.675V or 0.7V */
+	VCORE_DVFS_OPP_15 /* 0.65V */
 };
 #endif
 
@@ -888,47 +885,6 @@ static int emmc_autok_switch_cqe(struct msdc_host *host, bool enable)
 }
 #endif
 
-#ifdef SD_RUNTIME_AUTOK_MERGE
-int sd_runtime_autok_merge(struct msdc_host *host)
-{
-	int merge_result, merge_mode, merge_window, merge_count;
-	int i, ret = 0;
-	u8 *res;
-
-	for (merge_count = 1; merge_count < AUTOK_VCORE_NUM; merge_count++) {
-		if (host->autok_res[merge_count][0] == NULL) {
-			pr_info("[AUTOK]merge_count = %d\n", merge_count+1);
-			res = host->autok_res[merge_count];
-			ret = autok_execute_tuning(host, res);
-			break;
-		}
-	}
-
-	merge_mode = MERGE_HS200_SDR104;
-	merge_result = autok_vcore_merge_sel(host, merge_mode);
-	for (i = CMD_MAX_WIN; i <= H_CLK_TX_MAX_WIN; i++) {
-		merge_window = host->autok_res[AUTOK_VCORE_MERGE][i];
-		if (merge_window < AUTOK_MERGE_MIN_WIN)
-			merge_result = -1;
-		if (merge_window != 0xFF)
-			pr_info("[AUTOK]merge_value = %d\n", merge_window);
-	}
-
-	if (merge_result == 0) {
-		autok_tuning_parameter_init(host,
-			host->autok_res[AUTOK_VCORE_MERGE]);
-		pr_info("[AUTOK]No need change para when dvfs\n");
-	} else {
-		/* merge fail clear host->autok_res[merge_count][0] */
-		host->autok_res[merge_count][0] = NULL;
-		autok_tuning_parameter_init(host,
-			host->autok_res[AUTOK_VCORE_LEVEL0]);
-	}
-
-	return ret;
-}
-#endif
-
 /*
  * Vcore dvfs module MUST ensure having executed
  * the function before mmcblk0 inited + 3s,
@@ -943,7 +899,6 @@ int emmc_autok(void)
 	void __iomem *base;
 	int merge_result, merge_mode, merge_window;
 	int i, vcore_step1 = -1, vcore_step2 = 0;
-	struct regulator *reg_vcore;
 	/*
 	 * Static variable required by vcore dvfs module, otherwise deadlock
 	 * happens.
@@ -971,7 +926,7 @@ int emmc_autok(void)
 
 #ifdef CONFIG_MTK_EMMC_HW_CQ
 	if (emmc_autok_switch_cqe(host, 0))
-		pr_notice("WARN:%s:cqe disable fail", __func__);
+		return -1;
 #endif
 
 	pm_qos_add_request(&autok_force, PM_QOS_VCORE_DVFS_FORCE_OPP,
@@ -979,14 +934,10 @@ int emmc_autok(void)
 
 	for (i = 0; i < AUTOK_VCORE_NUM; i++) {
 		pm_qos_update_request(&autok_force, autok_opp[i]);
-		reg_vcore = devm_regulator_get_optional(mmc_dev(host->mmc),
-							"vcore");
-		vcore_step2 = regulator_get_voltage(reg_vcore);
-		if (vcore_step2 == -1) {
-			pr_notice("WARN:%s:get voltage fail\n", __func__);
-			return -1;
-		}
-		pr_notice("msdc fix vcore: %d\n", vcore_step2);
+		/* vcore = 0.51875V + 6.25mV * vcore_step2 */
+		vcore_step2 = pmic_get_register_value(PMIC_RG_BUCK_VCORE_VOSEL);
+		pr_notice("msdc fix vcore, PMIC_RG_BUCK_VCORE_VOSEL: %d\n",
+			vcore_step2);
 
 		if (vcore_step2 == vcore_step1) {
 			pr_info("skip duplicated vcore autok\n");
@@ -1033,7 +984,7 @@ int emmc_autok(void)
 	pm_qos_remove_request(&autok_force);
 #ifdef CONFIG_MTK_EMMC_HW_CQ
 	if (emmc_autok_switch_cqe(host, 1))
-		pr_notice("WARN:%s:cqe enable fail", __func__);
+		return -1;
 #endif
 
 	mmc_release_host(host->mmc);

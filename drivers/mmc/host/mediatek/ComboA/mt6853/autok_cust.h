@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 MediaTek Inc.
+/* Copyright (C) 2018 MediaTek Inc.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -12,6 +12,7 @@
 
 #ifndef _AUTOK_CUST_H_
 #define _AUTOK_CUST_H_
+
 
 #define AUTOK_VERSION                   (0x18110817)
 
@@ -245,7 +246,7 @@ struct AUTOK_PLAT_FUNC {
 		autok_para_rx.end_bit_chk_cnt_ddr208 = 0; \
 		autok_para_rx.latchck_switch_cnt_hs400 = 6; \
 		autok_para_rx.latchck_switch_cnt_ddr208 = 0; \
-		autok_para_rx.ds_dly3_hs400 = 20; \
+		autok_para_rx.ds_dly3_hs400 = 0; \
 		autok_para_rx.ds_dly3_ddr208 = 0; \
 	} while (0)
 
@@ -281,7 +282,7 @@ struct AUTOK_PLAT_FUNC {
 		autok_para_func.fifo_1k = 1; \
 		autok_para_func.latch_enhance = 1; \
 		autok_para_func.msdc0_bypass_duty_modify = 1; \
-		autok_para_func.msdc1_bypass_duty_modify = 0; \
+		autok_para_func.msdc1_bypass_duty_modify = 1; \
 		autok_para_func.msdc2_bypass_duty_modify = 0; \
 	} while (0)
 
@@ -300,22 +301,22 @@ struct AUTOK_PLAT_FUNC {
 #define AUTOK_TOP_SDC_RX_ENHANCE_EN (0x1 << 15) /* RW */
 
 /**********************************************************
- * Feature  Control Defination                             *
+ * Feature  Control Defination                            *
  **********************************************************/
-#define AUTOK_EMMC_OFFLINE_TUNE_TX_ENABLE 0
-#define AUTOK_SD_CARD_OFFLINE_TUNE_TX_ENABLE 0
-#define AUTOK_SDIO_OFFLINE_TUNE_TX_ENABLE 1
-#define AUTOK_OFFLINE_CMD_H_TX_ENABLE 0
-#define AUTOK_OFFLINE_DAT_H_TX_ENABLE 1
-#define AUTOK_OFFLINE_CMD_D_RX_ENABLE 0
-#define AUTOK_OFFLINE_DAT_D_RX_ENABLE 1
-#define AUTOK_OFFLINE_TUNE_DEVICE_RX_ENABLE 1
-#define AUTOK_PARAM_DUMP_ENABLE   0
-#define SINGLE_EDGE_ONLINE_TUNE   0
-#define SDIO_PLUS_CMD_TUNE        1
-#define STOP_CLK_NEW_PATH         0
-#define DS_DLY3_SCAN              0
-#define CHIP_DENALI_3_DAT_TUNE    0
+#define AUTOK_EMMC_OFFLINE_TUNE_TX_ENABLE       0
+#define AUTOK_SD_CARD_OFFLINE_TUNE_TX_ENABLE    0
+#define AUTOK_SDIO_OFFLINE_TUNE_TX_ENABLE       1
+#define AUTOK_OFFLINE_CMD_H_TX_ENABLE           0
+#define AUTOK_OFFLINE_DAT_H_TX_ENABLE           1
+#define AUTOK_OFFLINE_CMD_D_RX_ENABLE           0
+#define AUTOK_OFFLINE_DAT_D_RX_ENABLE           1
+#define AUTOK_OFFLINE_TUNE_DEVICE_RX_ENABLE     1
+#define AUTOK_PARAM_DUMP_ENABLE                 0
+#define SINGLE_EDGE_ONLINE_TUNE                 0
+#define SDIO_PLUS_CMD_TUNE                      1
+#define STOP_CLK_NEW_PATH                       0
+#define DS_DLY3_SCAN                            0
+#define CHIP_DENALI_3_DAT_TUNE                  0
 
 #endif /* _AUTOK_CUST_H_ */
 
