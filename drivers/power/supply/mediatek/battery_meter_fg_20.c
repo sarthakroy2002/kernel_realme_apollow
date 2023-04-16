@@ -1203,11 +1203,8 @@ int __batt_meter_init_cust_data_from_dt(struct platform_device *dev)
 
 int batt_meter_init_cust_data(struct platform_device *dev)
 {
-	/* #ifdef CONFIG_OF */
 	/* return __batt_meter_init_cust_data_from_dt(dev); */
-	/* #else */
 	return __batt_meter_init_cust_data_from_cust_header(dev);
-	/* #endif */
 }
 
 int get_r_fg_value(void)

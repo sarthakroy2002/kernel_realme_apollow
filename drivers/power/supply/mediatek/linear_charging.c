@@ -1286,7 +1286,6 @@ unsigned int BAT_ConstantCurrentModeAction(void)
 
 /* defined(MTK_LINEAR_CHARGER_NO_DISCHARGE) */
 #if defined(CONFIG_MTK_PUMP_EXPRESS_SUPPORT)
-/* no disable charging#else */
 #else
 	{
 		enum kal_bool charging_enable = KAL_FALSE;
