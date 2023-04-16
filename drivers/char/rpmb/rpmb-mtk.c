@@ -486,7 +486,12 @@ int emmc_rpmb_req_handle(struct mmc_card *card, struct emmc_rpmb_req *rpmb_req)
 	int ret;
 
 	/* rpmb_dump_frame(rpmb_req->data_frame);    */
-
+#ifdef VENDOR_EDIT
+	if (mmc_card_suspended(card)) {
+		MSG(ERR, "%s, emmc is suspend and can not exec rpmb request.\n", __func__);
+		return -EPERM;
+	}
+#endif
 	md = dev_get_drvdata(&card->dev);
 
 	list_for_each_entry(part_md, &md->part, part) {
