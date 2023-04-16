@@ -65,6 +65,10 @@
 #include <mt-plat/mtk_qos_prefetch_common.h>
 #endif /* CONFIG_MTK_QOS_FRAMEWORK */
 
+#ifdef OPLUS_FEATURE_UIFIRST
+#include <linux/uifirst/uifirst_sched_common.h>
+#endif /* OPLUS_FEATURE_UIFIRST */
+
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 DEFINE_MUTEX(sched_isolation_mutex);
@@ -1561,7 +1565,7 @@ retry:
 		/* Refcounting is expected to be always 0 for free groups */
 		if (unlikely(uc_cpu->group[clamp_id][group_id].tasks)) {
 #ifdef CONFIG_SCHED_DEBUG
-			pr_warn("invalid CPU[%d] clamp group [%u:%u] refcount: [%u]\n",
+			WARN(1, "invalid CPU[%d] clamp group [%u:%u] refcount: [%u]\n",
 			     cpu, clamp_id, group_id,
 			     uc_cpu->group[clamp_id][group_id].tasks);
 #endif
@@ -1923,6 +1927,21 @@ unsigned int get_capacity_margin(void)
 }
 EXPORT_SYMBOL(get_capacity_margin);
 
+#if defined(OPLUS_FEATURE_SCHEDUTIL_USE_TL) && defined(CONFIG_SCHEDUTIL_USE_TL)
+void set_capacity_margin_dvfs(unsigned int margin)
+{
+	capacity_margin_dvfs = margin;
+}
+EXPORT_SYMBOL(set_capacity_margin_dvfs);
+
+unsigned int get_capacity_margin_dvfs(void)
+{
+	return capacity_margin_dvfs;
+}
+EXPORT_SYMBOL(get_capacity_margin_dvfs);
+#endif
+
+
 static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 {
 	if (!(flags & ENQUEUE_NOCLOCK))
@@ -2231,6 +2250,12 @@ void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask)
 	bool queued, running;
 
 	lockdep_assert_held(&p->pi_lock);
+
+#ifdef OPLUS_FEATURE_PERFORMANCE
+	if ((p->flags & PF_KSWAPD) &&
+		(cpumask_test_cpu(6, new_mask) || cpumask_test_cpu(7, new_mask)))
+		return;
+#endif
 
 	queued = task_on_rq_queued(p);
 	running = task_current(rq, p);
@@ -3213,6 +3238,9 @@ static inline void walt_try_to_wake_up(struct task_struct *p)
 	wallclock = walt_ktime_clock();
 	walt_update_task_ravg(rq->curr, rq, TASK_UPDATE, wallclock, 0);
 	walt_update_task_ravg(p, rq, TASK_WAKE, wallclock, 0);
+#if defined (CONFIG_SCHED_WALT)  && defined (OPLUS_FEATURE_UIFIRST)
+	p->last_wake_ts = wallclock;
+#endif
 	rq_unlock_irqrestore(rq, &rf);
 }
 #else
@@ -3401,6 +3429,9 @@ static void try_to_wake_up_local(struct task_struct *p, struct rq_flags *rf)
 			atomic_dec(&rq->nr_iowait);
 		}
 		ttwu_activate(rq, p, ENQUEUE_WAKEUP | ENQUEUE_NOCLOCK);
+#if defined (CONFIG_SCHED_WALT) && defined (OPLUS_FEATURE_UIFIRST)
+	p->last_wake_ts = wallclock;
+#endif
 	}
 
 	ttwu_do_wakeup(rq, p, 0, rf);
@@ -4315,6 +4346,50 @@ unsigned long long task_sched_runtime(struct task_struct *p)
 	return ns;
 }
 
+
+#if defined(OPLUS_FEATURE_CORE_CTL) && defined(CONFIG_SCHED_CORE_CTL)
+extern int tick_do_timer_cpu __read_mostly;
+#include <linux/sched/core_ctl.h>
+#endif /* OPLUS_FEATURE_CORE_CTL */
+
+#if defined (CONFIG_SCHED_WALT) && defined (OPLUS_FEATURE_UIFIRST)
+extern int sysctl_frame_rate;
+extern unsigned int walt_ravg_window;
+extern bool ux_task_misfit(struct task_struct *p, int cpu);
+u64 ux_task_load[NR_CPUS] = {0};
+u64 ux_load_ts[NR_CPUS] = {0};
+static u64 calc_freq_ux_load(struct task_struct *p, u64 wallclock)
+{
+	unsigned int maxtime = 0, factor = 0;
+	unsigned int window_size = walt_ravg_window / NSEC_PER_MSEC;
+	u64 timeline = 0, freq_exec_load = 0, freq_ravg_load = 0;
+	u64 wakeclock = p->last_wake_ts;
+
+	if (wallclock < wakeclock)
+		return 0;
+
+	if (sysctl_frame_rate <= 90)
+		maxtime = 5;
+	else if (sysctl_frame_rate <= 120)
+		maxtime = 4;
+	else
+		maxtime = 3;
+
+	timeline = wallclock - wakeclock;
+	factor = window_size / maxtime;
+	freq_exec_load = timeline * factor;
+
+	if (freq_exec_load > walt_ravg_window)
+		freq_exec_load = walt_ravg_window;
+
+	freq_ravg_load = (p->ravg.prev_window + p->ravg.curr_window) << 1;
+	if (freq_ravg_load > walt_ravg_window)
+		freq_ravg_load = walt_ravg_window;
+
+	return max(freq_exec_load, freq_ravg_load);
+}
+#endif
+
 /*
  * This function gets called by the timer code, with HZ frequency.
  * We call it with interrupts disabled.
@@ -4334,6 +4409,21 @@ void scheduler_tick(void)
 	walt_update_task_ravg(rq->curr, rq, TASK_UPDATE,
 			walt_ktime_clock(), 0);
 	update_rq_clock(rq);
+#if defined (CONFIG_SCHED_WALT) && defined (OPLUS_FEATURE_UIFIRST)
+	if (sysctl_uifirst_enabled && (sysctl_slide_boost_enabled || sysctl_animation_type == LAUNCHER_SI_START)) {
+		u64 wallclock = walt_ktime_clock();
+		unsigned int flag = 0;
+		if(rq->curr && rq->curr->static_ux == 2 && !ux_task_misfit(rq->curr, cpu)) {
+			ux_task_load[cpu] = calc_freq_ux_load(rq->curr, wallclock);
+			ux_load_ts[cpu] = wallclock;
+
+			flag = SCHED_CPUFREQ_BOOST;
+			cpufreq_update_util(rq, flag);
+		} else if (ux_task_load[cpu] != 0) {
+			ux_task_load[cpu] = 0;
+		}
+	}
+#endif
 	curr->sched_class->task_tick(rq, curr, 0);
 	cpu_load_update_active(rq);
 	calc_global_load_tick(rq);
@@ -4346,19 +4436,21 @@ void scheduler_tick(void)
 #ifdef CONFIG_MTK_CACHE_CONTROL
 	hook_ca_scheduler_tick(cpu);
 #endif
+#ifdef CONFIG_MTK_PERF_TRACKER
+	perf_tracker(ktime_get_ns());
+#endif
 
 #ifdef CONFIG_SMP
 	rq->idle_balance = idle_cpu(cpu);
+#ifdef OPLUS_FEATURE_SPECIALOPT
+	if(!sysctl_cpu_multi_thread)
+#endif
 	trigger_load_balance(rq);
 #endif
 	rq_last_tick_reset(rq);
 
 #ifdef CONFIG_MTK_SCHED_RQAVG_KS
 	sched_max_util_task_tracking();
-#endif
-
-#ifdef CONFIG_MTK_PERF_TRACKER
-	perf_tracker(ktime_get_ns());
 #endif
 
 #ifdef CONFIG_MTK_SCHED_CPULOAD
@@ -4368,9 +4460,15 @@ void scheduler_tick(void)
 	if (curr->sched_class == &fair_sched_class)
 		check_for_migration(rq, curr);
 
+#if defined(OPLUS_FEATURE_CORE_CTL) && defined(CONFIG_SCHED_CORE_CTL)
+	if (cpu == tick_do_timer_cpu)
+		core_ctl_check(ktime_get_ns());
+#endif /* OPLUS_FEATURE_CORE_CTL */
+
 #ifdef CONFIG_MTK_QOS_FRAMEWORK
 	qos_prefetch_tick(cpu);
 #endif /* CONFIG_MTK_QOS_FRAMEWORK */
+
 }
 
 #ifdef CONFIG_NO_HZ_FULL
@@ -4584,6 +4682,47 @@ again:
 	/* The idle class should always have a runnable task: */
 	BUG();
 }
+static unsigned long __read_mostly tracing_mark_write_addr = 0;
+static inline void __mt_update_tracing_mark_write_addr(void)
+{
+	if (unlikely(tracing_mark_write_addr == 0))
+		tracing_mark_write_addr = kallsyms_lookup_name("tracing_mark_write");
+
+}
+
+void trace_begin(char *name)
+{
+
+	__mt_update_tracing_mark_write_addr();
+	preempt_disable();
+	event_trace_printk(tracing_mark_write_addr,"B|%d|%s\n",current->tgid,name);
+	preempt_enable();
+}
+
+void trace_end()
+{
+
+	__mt_update_tracing_mark_write_addr();
+	preempt_disable();
+	event_trace_printk(tracing_mark_write_addr,"E\n");
+	preempt_enable();
+}
+
+void record_trace_callback()
+{
+	int i = 0 ;
+	char caller[256] = {0};
+	unsigned long caller_ip;
+	for (i = 0; i < 10; i++)
+	{
+		caller_ip = (unsigned long)ftrace_return_address(i);
+		sprint_symbol(caller,caller_ip);
+		trace_begin(caller);
+	}
+	for (i = 0 ; i < 10; i++)
+		trace_end();
+
+}
 
 /*
  * __schedule() is the main scheduler function.
@@ -4637,6 +4776,9 @@ static void __sched notrace __schedule(bool preempt)
 	rq = cpu_rq(cpu);
 	prev = rq->curr;
 
+	if ((prev->state & TASK_UNINTERRUPTIBLE) == TASK_UNINTERRUPTIBLE) {
+	record_trace_callback();
+}
 	schedule_debug(prev);
 
 	if (sched_feat(HRTICK))
@@ -4685,6 +4827,10 @@ static void __sched notrace __schedule(bool preempt)
 		}
 		switch_count = &prev->nvcsw;
 	}
+
+#ifdef OPLUS_FEATURE_UIFIRST
+	prev->enqueue_time = rq->clock;
+#endif /* OPLUS_FEATURE_UIFIRST */
 
 	next = pick_next_task(rq, prev, &rf);
 	wallclock = walt_ktime_clock();
@@ -6916,14 +7062,6 @@ static void migrate_tasks(struct rq *dead_rq, struct rq_flags *rf,
 			break;
 
 		/*
-		 * put_prev_task() and pick_next_task() sched
-		 * class method both need to have an up-to-date
-		 * value of rq->clock[_task],
-		 * this value may be changed, so must update again.
-		 */
-		if (!(rq->clock_update_flags & RQCF_UPDATED))
-			update_rq_clock(rq);
-		/*
 		 * pick_next_task() assumes pinned rq->lock:
 		 */
 		next = pick_next_task(rq, &fake_task, rf);
@@ -7142,7 +7280,6 @@ out:
 			__func__, iso_prio, cpu, cpu_isolated_mask->bits[0]);
 	return ret_code;
 }
-EXPORT_SYMBOL(_sched_isolate_cpu);
 
 /*
  * Note: The client calling sched_isolate_cpu() is repsonsible for ONLY
@@ -7150,7 +7287,7 @@ EXPORT_SYMBOL(_sched_isolate_cpu);
  * Client is also responsible for deisolating when a core goes offline
  * (after CPU is marked offline).
  */
-int sched_deisolate_cpu_unlocked(int cpu)
+int __sched_deisolate_cpu_unlocked(int cpu)
 {
 	int ret_code = 0;
 	struct rq *rq = cpu_rq(cpu);
@@ -7202,11 +7339,10 @@ int _sched_deisolate_cpu(int cpu)
 	int ret_code;
 
 	cpu_maps_update_begin();
-	ret_code = sched_deisolate_cpu_unlocked(cpu);
+	ret_code = __sched_deisolate_cpu_unlocked(cpu);
 	cpu_maps_update_done();
 	return ret_code;
 }
-EXPORT_SYMBOL(_sched_deisolate_cpu);
 
 void iso_cpumask_init(void)
 {
@@ -7556,6 +7692,9 @@ void __init sched_init_smp(void)
 	sched_init_granularity();
 	free_cpumask_var(non_isolated_cpus);
 
+#ifdef OPLUS_FEATURE_UIFIRST
+	ux_init_cpu_data();
+#endif /* OPLUS_FEATURE_UIFIRST */
 	init_sched_rt_class();
 	init_sched_dl_class();
 
@@ -7674,6 +7813,9 @@ void __init sched_init(void)
 		init_cfs_rq(&rq->cfs);
 		init_rt_rq(&rq->rt);
 		init_dl_rq(&rq->dl);
+#ifdef OPLUS_FEATURE_UIFIRST
+		ux_init_rq_data(rq);
+#endif /* OPLUS_FEATURE_UIFIRST */
 #ifdef CONFIG_FAIR_GROUP_SCHED
 		root_task_group.shares = ROOT_TASK_GROUP_LOAD;
 		INIT_LIST_HEAD(&rq->leaf_cfs_rq_list);
