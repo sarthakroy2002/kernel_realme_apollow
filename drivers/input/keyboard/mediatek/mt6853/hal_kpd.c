@@ -21,6 +21,13 @@
 #include <hal_kpd.h>
 #include <mt-plat/mtk_boot_common.h>
 
+#include <soc/oppo/oppo_project.h>
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_THEIA)
+//Yang.Gang@BSP.Kernel.Stability,add 2020/06/08 for BScheck
+#include <soc/oplus/system/oplus_bscheck.h>
+#include <soc/oplus/system/oplus_brightscreen_check.h>
+#endif
 #ifdef CONFIG_MTK_PMIC_NEW_ARCH /*for pmic not ready*/
 static int kpd_enable_lprst = 1;
 #endif
@@ -55,6 +62,9 @@ void kpd_get_keymap_state(u16 state[])
 void long_press_reboot_function_setting(void)
 {
 #ifdef CONFIG_MTK_PMIC_NEW_ARCH /*for pmic not ready*/
+	if (20075 != get_project() && 20076 != get_project()) {
+	/* unlock PMIC protect key */
+	pmic_set_register_value(PMIC_RG_CPS_W_KEY, 0x4729);
 	if (kpd_enable_lprst && get_boot_mode() == NORMAL_BOOT) {
 		kpd_info("Normal Boot long press reboot selection\n");
 
@@ -95,6 +105,9 @@ void long_press_reboot_function_setting(void)
 			pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x00);
 #endif
 
+	}
+	/* lock PMIC protect key */
+	pmic_set_register_value(PMIC_RG_CPS_W_KEY, 0);
 	}
 #endif
 }
@@ -187,6 +200,15 @@ void kpd_pmic_pwrkey_hal(unsigned long pressed)
 	input_sync(kpd_input_dev);
 	kpd_print(KPD_SAY "(%s) HW keycode =%d using PMIC\n",
 	       pressed ? "pressed" : "released", kpd_dts_data.kpd_sw_pwrkey);
+
+    #if IS_ENABLED(CONFIG_OPLUS_FEATURE_THEIA)
+    //Yang.Gang@BSP.Kernel.Stability,add 2020/06/08 for BScheck
+    if(pressed){
+        //we should canel per work
+        black_screen_timer_restart();
+        bright_screen_timer_restart();
+    }
+    #endif		   
 }
 
 static int mrdump_eint_state;

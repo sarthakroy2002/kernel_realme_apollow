@@ -20,11 +20,6 @@
 #include <kpd.h>
 #include <hal_kpd.h>
 #include <mt-plat/mtk_boot_common.h>
-#if IS_ENABLED(CONFIG_OPLUS_FEATURE_THEIA)
-//Yang.Gang@BSP.Kernel.Stability,add 2020/06/08 for BScheck
-#include <soc/oplus/system/oplus_bscheck.h>
-#include <soc/oplus/system/oplus_brightscreen_check.h>
-#endif
 
 #ifdef CONFIG_MTK_PMIC_NEW_ARCH /*for pmic not ready*/
 static int kpd_enable_lprst = 1;
@@ -62,44 +57,49 @@ void long_press_reboot_function_setting(void)
 #ifdef CONFIG_MTK_PMIC_NEW_ARCH /*for pmic not ready*/
 	if (kpd_enable_lprst && get_boot_mode() == NORMAL_BOOT) {
 		kpd_info("Normal Boot long press reboot selection\n");
-
 #ifdef CONFIG_KPD_PMIC_LPRST_TD
 		kpd_info("Enable normal mode LPRST\n");
 #ifdef CONFIG_ONEKEY_REBOOT_NORMAL_MODE
-		/*POWERKEY*/
-		pmic_set_register_value(PMIC_RG_PWRKEY_KEY_MODE, 0x00);
-#elif defined(CONFIG_TWOKEY_REBOOT_NORMAL_MODE)
-		/*PWRKEY + HOMEKEY*/
-		pmic_set_register_value(PMIC_RG_PWRKEY_KEY_MODE, 0x01);
-#endif
+		pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x01);
+		pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x00);
 		pmic_set_register_value(PMIC_RG_PWRKEY_RST_TD,
 			CONFIG_KPD_PMIC_LPRST_TD);
+#endif
+
+#ifdef CONFIG_TWOKEY_REBOOT_NORMAL_MODE
 		pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x01);
+		pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x01);
+		pmic_set_register_value(PMIC_RG_PWRKEY_RST_TD,
+			CONFIG_KPD_PMIC_LPRST_TD);
+#endif
 #else
 		kpd_info("disable normal mode LPRST\n");
 		pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x00);
+		pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x00);
+
 #endif
 	} else {
 		kpd_info("Other Boot Mode long press reboot selection\n");
-
 #ifdef CONFIG_KPD_PMIC_LPRST_TD
 		kpd_info("Enable other mode LPRST\n");
-
-#ifdef CONFIG_ONEKEY_REBOOT_NORMAL_MODE
-			/*POWERKEY*/
-			pmic_set_register_value(PMIC_RG_PWRKEY_KEY_MODE, 0x00);
-#elif defined(CONFIG_TWOKEY_REBOOT_NORMAL_MODE)
-			/*PWRKEY + HOMEKEY*/
-			pmic_set_register_value(PMIC_RG_PWRKEY_KEY_MODE, 0x01);
+#ifdef CONFIG_ONEKEY_REBOOT_OTHER_MODE
+		pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x01);
+		pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x00);
+		pmic_set_register_value(PMIC_RG_PWRKEY_RST_TD,
+			CONFIG_KPD_PMIC_LPRST_TD);
 #endif
-			pmic_set_register_value(PMIC_RG_PWRKEY_RST_TD,
-				CONFIG_KPD_PMIC_LPRST_TD);
-			pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x01);
+
+#ifdef CONFIG_TWOKEY_REBOOT_OTHER_MODE
+		pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x01);
+		pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x01);
+		pmic_set_register_value(PMIC_RG_PWRKEY_RST_TD,
+			CONFIG_KPD_PMIC_LPRST_TD);
+#endif
 #else
-			kpd_info("disable normal mode LPRST\n");
-			pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x00);
+		kpd_info("disable other mode LPRST\n");
+		pmic_set_register_value(PMIC_RG_PWRKEY_RST_EN, 0x00);
+		pmic_set_register_value(PMIC_RG_HOMEKEY_RST_EN, 0x00);
 #endif
-
 	}
 #endif
 }
@@ -113,10 +113,12 @@ bool __attribute__ ((weak)) ConditionEnterSuspend(void)
 /********************************************************************/
 void kpd_wakeup_src_setting(int enable)
 {
-/*
+//ifdef OPLUS_BUG_STABILITY
+/*2020/10/26, Remove for keypad volume up and volume down */
+#if 0
 	int is_fm_radio_playing = 0;
 
-	// If FM is playing, keep keypad as wakeup source
+	/* If FM is playing, keep keypad as wakeup source */
 	if (ConditionEnterSuspend() == true)
 		is_fm_radio_playing = 0;
 	else
@@ -131,7 +133,7 @@ void kpd_wakeup_src_setting(int enable)
 			enable_kpd(0);
 		}
 	}
-*/
+#endif
 	if (enable == 1) {
 		kpd_print("enable kpd work!\n");
 		enable_kpd(1);
@@ -201,15 +203,6 @@ void kpd_pmic_pwrkey_hal(unsigned long pressed)
 	input_sync(kpd_input_dev);
 	kpd_print(KPD_SAY "(%s) HW keycode =%d using PMIC\n",
 	       pressed ? "pressed" : "released", kpd_dts_data.kpd_sw_pwrkey);
-
-    #if IS_ENABLED(CONFIG_OPLUS_FEATURE_THEIA)
-    //Yang.Gang@BSP.Kernel.Stability,add 2020/06/08 for BScheck
-    if(pressed){
-        //we should canel per work
-        black_screen_timer_restart();
-        bright_screen_timer_restart();
-    }
-    #endif		   
 }
 
 static int mrdump_eint_state;
@@ -244,11 +237,19 @@ void mt_eint_register(void)
 		kpd_print("can't find compatible node\n");
 	else {
 		mrdump_ext_rst_irq = irq_of_parse_and_map(node, 0);
-		ret = request_irq(mrdump_ext_rst_irq, mrdump_rst_eint_handler,
-				  IRQF_TRIGGER_NONE, "mrdump_ext_rst-eint",
-				  NULL);
-		if (ret > 0)
-			kpd_print("EINT IRQ LINE NOT AVAILABLE\n");
+		if (mrdump_ext_rst_irq) {
+			ret = request_irq(mrdump_ext_rst_irq,
+					mrdump_rst_eint_handler,
+					IRQF_TRIGGER_NONE,
+					"mrdump_ext_rst-eint",
+					NULL);
+			if (ret > 0)
+				kpd_print("EINT IRQ LINE NOT AVAILABLE\n");
+			ret = enable_irq_wake(mrdump_ext_rst_irq);
+			if (ret > 0)
+				kpd_print("%s: enable_irq_wake failed.\n",
+					__func__);
+		}
 	}
 }
 
