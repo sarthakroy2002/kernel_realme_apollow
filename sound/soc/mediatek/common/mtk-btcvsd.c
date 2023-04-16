@@ -10,6 +10,7 @@
 #include <linux/timer.h>
 #include <linux/of_address.h>
 #include <linux/sched/clock.h>
+#include <linux/timer.h>
 
 #include <sound/soc.h>
 

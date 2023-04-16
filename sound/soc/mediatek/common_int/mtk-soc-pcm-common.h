@@ -125,7 +125,6 @@
 #define SOC_HIGH_USE_CHANNELS_MIN 1
 #define SOC_HIGH_USE_CHANNELS_MAX 8
 
-/*#ifdef AUDIO_ALLOCATE_SMP_RATE_DECLARE*/
 #if 1
 /* Conventional and unconventional sample rate supported */
 static const unsigned int soc_fm_supported_sample_rates[3] = {32000, 44100,
