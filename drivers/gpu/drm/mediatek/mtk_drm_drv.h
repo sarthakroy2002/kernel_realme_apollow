@@ -37,6 +37,11 @@
 #define CONFIG_MTK_DISPLAY_CMDQ
 #define MTK_FILL_MIPI_IMPEDANCE
 
+/*
+* add for fingerprint notify frigger
+*/
+#define MTK_ONSCREENFINGERPRINT_EVENT 20
+
 struct device;
 struct device_node;
 struct drm_crtc;
@@ -174,10 +179,8 @@ struct mtk_drm_private {
 	int need_vds_path_switch;
 	int vds_path_switch_dirty;
 	int vds_path_switch_done;
+	int need_vds_path_switch_back;
 	int vds_path_enable;
-
-	bool need_cwb_path_disconnect;
-	bool cwb_is_preempted;
 
 	/* Due to 2nd display share 1 secure gce client, need store here */
 	struct cmdq_client *ext_sec_client;
@@ -243,6 +246,8 @@ extern struct platform_driver mtk_dp_tx_driver;
 extern struct platform_driver mtk_dp_intf_driver;
 #endif
 
+void mtk_atomic_state_get(struct drm_atomic_state *state);
+void mtk_atomic_state_put(struct drm_atomic_state *state);
 void mtk_atomic_state_put_queue(struct drm_atomic_state *state);
 void mtk_drm_fence_update(unsigned int fence_idx, unsigned int index);
 void drm_trigger_repaint(enum DRM_REPAINT_TYPE type,
@@ -264,5 +269,5 @@ int lcm_fps_ctx_init(struct drm_crtc *crtc);
 int lcm_fps_ctx_reset(struct drm_crtc *crtc);
 int lcm_fps_ctx_update(unsigned long long cur_ns,
 		unsigned int crtc_id, unsigned int mode);
-void disp_drm_debug(const char *opt);
+
 #endif /* MTK_DRM_DRV_H */

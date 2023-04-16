@@ -258,6 +258,8 @@ static inline struct mtk_disp_rdma *comp_to_rdma(struct mtk_ddp_comp *comp)
 	return container_of(comp, struct mtk_disp_rdma, ddp_comp);
 }
 
+extern int hbm_eof_flag;
+extern void fingerprint_send_notify(unsigned int fingerprint_op_mode);
 static irqreturn_t mtk_disp_rdma_irq_handler(int irq, void *dev_id)
 {
 	struct mtk_disp_rdma *priv = dev_id;
@@ -320,6 +322,10 @@ static irqreturn_t mtk_disp_rdma_irq_handler(int irq, void *dev_id)
 		if (rdma->id == DDP_COMPONENT_RDMA0)
 			DRM_MMP_EVENT_START(rdma0, val, 0);
 		DDPIRQ("[IRQ] %s: frame start!\n", mtk_dump_comp_str(rdma));
+		if(hbm_eof_flag){
+			fingerprint_send_notify(0);
+			hbm_eof_flag = 0;
+		}
 		mtk_drm_refresh_tag_start(&priv->ddp_comp);
 		MMPathTraceDRM(rdma);
 
@@ -569,8 +575,14 @@ void mtk_rdma_cal_golden_setting(struct mtk_ddp_comp *comp,
 	/* DISP_RDMA_FIFO_CON */
 	if (gsc->is_vdo_mode)
 		gs[GS_RDMA_OUTPUT_VALID_FIFO_TH] = 0;
-	else
-		gs[GS_RDMA_OUTPUT_VALID_FIFO_TH] = gs[GS_RDMA_PRE_ULTRA_TH_LOW];
+	else {
+		struct mtk_panel_params *panel_ext =
+			mtk_drm_get_lcm_ext_params(&comp->mtk_crtc->base);
+		if (panel_ext &&  panel_ext->output_mode == MTK_PANEL_DSC_SINGLE_PORT)
+			gs[GS_RDMA_OUTPUT_VALID_FIFO_TH] = 0;
+		else
+			gs[GS_RDMA_OUTPUT_VALID_FIFO_TH] = gs[GS_RDMA_PRE_ULTRA_TH_LOW];
+	}
 	gs[GS_RDMA_FIFO_SIZE] = fifo_size;
 	gs[GS_RDMA_FIFO_UNDERFLOW_EN] = 0;
 
@@ -652,7 +664,6 @@ static void mtk_rdma_set_ultra_l(struct mtk_ddp_comp *comp,
 	unsigned int val = 0;
 
 	if ((comp->id != DDP_COMPONENT_RDMA0)
-		&& (comp->id != DDP_COMPONENT_RDMA1)
 		&& (comp->id != DDP_COMPONENT_RDMA4)
 		&& (comp->id != DDP_COMPONENT_RDMA5)) {
 		DDPPR_ERR("unsupport golden setting, id:%d\n", comp->id);

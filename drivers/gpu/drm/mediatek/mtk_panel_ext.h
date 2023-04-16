@@ -20,7 +20,7 @@
 #define ESD_CHECK_NUM 3
 #define MAX_TX_CMD_NUM 20
 #define MAX_RX_CMD_NUM 20
-#define READ_DDIC_SLOT_NUM 4
+#define READ_DDIC_SLOT_NUM (4 * MAX_RX_CMD_NUM)
 #define MAX_DYN_CMD_NUM 20
 
 
@@ -103,6 +103,7 @@ struct esd_check_item {
 enum MTK_PANEL_MODE_SWITCH_STAGE {
 	BEFORE_DSI_POWERDOWN,
 	AFTER_DSI_POWERON,
+	AFTER_CHANGE_DATARATE,
 };
 
 enum MIPITX_PHY_PORT {
@@ -205,8 +206,10 @@ struct dfps_switch_cmd {
 struct dynamic_fps_params {
 	unsigned int switch_en;
 	unsigned int vact_timing_fps;
-	unsigned int data_rate;
 	struct dfps_switch_cmd dfps_cmd_table[MAX_DYN_CMD_NUM];
+
+	unsigned int lfr_enable;
+	unsigned int lfr_minimum_fps;
 };
 
 struct mtk_panel_params {
@@ -229,11 +232,7 @@ struct mtk_panel_params {
 	unsigned int corner_pattern_height;
 	unsigned int corner_pattern_height_bot;
 	unsigned int corner_pattern_tp_size;
-	unsigned int corner_pattern_tp_size_l;
-	unsigned int corner_pattern_tp_size_r;
 	void *corner_pattern_lt_addr;
-	void *corner_pattern_lt_addr_l;
-	void *corner_pattern_lt_addr_r;
 	unsigned int physical_width_um;
 	unsigned int physical_height_um;
 	unsigned int lane_swap_en;
@@ -242,16 +241,24 @@ struct mtk_panel_params {
 		lane_swap[MIPITX_PHY_PORT_NUM][MIPITX_PHY_LANE_NUM];
 	struct mtk_panel_dsc_params dsc_params;
 	unsigned int output_mode;
-	unsigned int lcm_cmd_if;
 	unsigned int hbm_en_time;
 	unsigned int hbm_dis_time;
 	unsigned int lcm_index;
 	unsigned int wait_sof_before_dec_vfp;
 	unsigned int doze_delay;
-
-//Settings for LFR Function:
-	unsigned int lfr_enable;
-	unsigned int lfr_minimum_fps;
+	/* Zhijun.Ye@PSW.MM.Display.LCD.Machine 2020/09/19, add for ramless panel */
+	unsigned int oplus_panel_cv_switch;
+	/* Zhijun.Ye@PSW.MM.Display.LCD.Machine 2020/09/23, add for lpx cycle calculation */
+	unsigned int oplus_lpx_ns_multiplier;
+	/* Zhijun.Ye@PSW.MM.Display.LCD.Machine 2020/10/23, add for dc cmd timing */
+	unsigned int oplus_dc_then_hbm_on;
+	/* liwei.a@PSW.MM.Display.LCD.Machine 2020/11/10, add for bhm splashing issue*/
+	unsigned int oplus_hbm_on_sync_with_flush;
+	unsigned int oplus_hbm_off_sync_with_flush;
+	unsigned int oplus_need_hbm_wait;
+	unsigned int oplus_samsung_panel;
+	/* Yaqiang.Shi@RM.MM.Display.LCD.Machine 2020/11/25, add for athens-b aod issue */
+	unsigned int oplus_no_reset_before_aod_enable;
 };
 
 struct mtk_panel_ext {
@@ -282,6 +289,13 @@ struct mtk_panel_funcs {
 		unsigned int dst_mode, enum MTK_PANEL_MODE_SWITCH_STAGE stage);
 	int (*get_virtual_heigh)(void);
 	int (*get_virtual_width)(void);
+	int (*esd_backlight_recovery)(void *dsi_drv, dcs_write_gce cb,
+		void *handle);
+	int (*panel_poweroff)(struct drm_panel *panel);
+	int (*panel_poweron)(struct drm_panel *panel);
+	void (*hbm_set_state)(struct drm_panel *panel, bool state);
+	int (*set_hbm)(void *dsi_drv, dcs_write_gce cb,
+		void *handle, unsigned int hbm_mode);
 	/**
 	 * @doze_enable_start:
 	 *
@@ -326,6 +340,23 @@ struct mtk_panel_funcs {
 	int (*doze_area)(struct drm_panel *panel,
 		void *dsi_drv, dcs_write_gce cb, void *handle);
 
+	/* Zhijun.Ye@PSW.MM.Display.LCD.Stability 2020/09/15, add for aod */
+	/**
+	 * @doze_area_setting:
+	 *
+	 * Send the panel area in command here.
+	 */
+	int (*doze_area_set)(void *dsi, dcs_write_gce cb, void *handle);
+
+	/* Jian.Zhou@PSW.MM.Display.LCD.Stability 2020/10/26, add func interfaces for lcm drivers */
+	int (*doze_enable_end)(struct drm_panel *panel,
+		void *dsi_drv, dcs_write_gce cb, void *handle);
+	int (*doze_post_disp_off)(struct drm_panel *panel,
+		void *dsi_drv, dcs_write_gce cb, void *handle);
+	int (*set_safe_mode)(void *dsi_drv, dcs_write_gce cb,
+		void *handle, unsigned int level);
+	int (*panel_disp_off)(void *dsi, dcs_write_gce cb, void *handle);
+
 	/**
 	 * @doze_get_mode_flags:
 	 *
@@ -340,6 +371,18 @@ struct mtk_panel_funcs {
 	void (*hbm_get_state)(struct drm_panel *panel, bool *state);
 	void (*hbm_get_wait_state)(struct drm_panel *panel, bool *wait);
 	bool (*hbm_set_wait_state)(struct drm_panel *panel, bool wait);
+	int (*esd_backlight_check)(void *dsi_drv, dcs_write_gce cb,
+		void *handle);
+	int (*oplus_get_aod_state)(void);
+	#ifdef OPLUS_BUG_STABILITY
+	/* Zhijun.Ye@PSW.MM.Display.LCD.Machine 2020/10/23, add for dc cmd timing */
+	int (*set_dc_backlight)(void *dsi_drv, dcs_write_gce cb,
+		void *handle, unsigned int level);
+	/*liwei.a@PSW.MM.Display.LCD.Stability, add for novatek IC, 2020/06/01*/
+	int (*nt_reset)(struct drm_panel *panel, int on);
+	void (*cabc_switch)(void *dsi_drv, dcs_write_gce cb,
+			void *handle, unsigned int cabc_mode);
+	#endif /* OPLUS_BUG_STABILITY */
 };
 
 void mtk_panel_init(struct mtk_panel_ctx *ctx);
