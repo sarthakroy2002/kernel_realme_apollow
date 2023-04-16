@@ -19,7 +19,7 @@
 
 #include "kd_camera_typedef.h"
 #include "kd_camera_feature.h"
-
+#include <soc/oplus/system/oppo_project.h>
 
 #include "imgsensor_hw.h"
 
@@ -54,7 +54,18 @@ enum IMGSENSOR_RETURN imgsensor_hw_init(struct IMGSENSOR_HW *phw)
 	for (i = 0; i < IMGSENSOR_SENSOR_IDX_MAX_NUM; i++) {
 		psensor_pwr = &phw->sensor_pwr[i];
 
-		pcust_pwr_cfg = imgsensor_custom_config;
+		#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		if (pascal_project() == 4) {
+			pcust_pwr_cfg =imgsensor_custom_config;
+		} else if(pascal_project() == 5) {
+			pcust_pwr_cfg =imgsensor_custom_config_monetx;
+		} else {
+			pcust_pwr_cfg = imgsensor_custom_config;
+		}
+		if (is_project(20761) || is_project(20762) || is_project(20764) || is_project(20766) || is_project(20767)) {
+			pcust_pwr_cfg =imgsensor_custom_config_even;
+		}
+		#endif
 		while (pcust_pwr_cfg->sensor_idx != i &&
 		       pcust_pwr_cfg->sensor_idx != IMGSENSOR_SENSOR_IDX_NONE)
 			pcust_pwr_cfg++;
@@ -106,7 +117,7 @@ static enum IMGSENSOR_RETURN imgsensor_hw_power_sequence(
 	struct IMGSENSOR_HW_DEVICE       *pdev;
 	int                               pin_cnt = 0;
 
-/*	while (ppwr_seq < ppower_sequence + IMGSENSOR_HW_SENSOR_MAX_NUM &&
+	while (ppwr_seq < ppower_sequence + IMGSENSOR_HW_SENSOR_MAX_NUM &&
 		ppwr_seq->name != NULL) {
 		if (!strcmp(ppwr_seq->name, PLATFORM_POWER_SEQ_NAME)) {
 			if (sensor_idx == ppwr_seq->_idx)
@@ -120,7 +131,6 @@ static enum IMGSENSOR_RETURN imgsensor_hw_power_sequence(
 
 	if (ppwr_seq->name == NULL)
 		return IMGSENSOR_RETURN_ERROR;
-*/
 
 	ppwr_info = ppwr_seq->pwr_info;
 
@@ -208,12 +218,15 @@ enum IMGSENSOR_RETURN imgsensor_hw_power(
 		ret = IMGSENSOR_RETURN_ERROR;
 		return ret;
 	}
-	imgsensor_hw_power_sequence(
-	    phw,
-	    sensor_idx,
-	    pwr_status,
-	    platform_power_sequence,
-	    str_index);
+
+	if (!is_project(20761) && !is_project(20762) && !is_project(20764) && !is_project(20766) && !is_project(20767)) {
+		imgsensor_hw_power_sequence(
+			phw,
+			sensor_idx,
+			pwr_status,
+			platform_power_sequence,
+			str_index);
+	}
 
 	imgsensor_hw_power_sequence(
 	    phw,

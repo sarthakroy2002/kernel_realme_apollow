@@ -160,7 +160,6 @@ int mtk_mdm_start_query(void)
 
 	mdm_sw = true;
 	mtk_mdm_enable();
-/* #endif */
 	return 0;
 }
 EXPORT_SYMBOL(mtk_mdm_start_query);

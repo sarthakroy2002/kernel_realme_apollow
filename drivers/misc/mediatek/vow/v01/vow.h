@@ -86,7 +86,7 @@
 #define VOW_RECOGDATA_SIZE             0x2800
 
 #define VOW_PCM_DUMP_BYTE_SIZE         0xA00 /* 320 * 8 */
-#define VOW_ENGINE_INFO_LENGTH_BYTE    40
+#define VOW_ENGINE_INFO_LENGTH_BYTE    64
 
 /* below is control message */
 #define VOW_SET_CONTROL               _IOW(VOW_IOC_MAGIC, 0x03, unsigned int)
@@ -103,6 +103,7 @@
 #define VOW_GET_ALEXA_ENGINE_VER      _IOW(VOW_IOC_MAGIC, 0x11, unsigned int)
 #define VOW_GET_GOOGLE_ENGINE_VER     _IOW(VOW_IOC_MAGIC, 0x12, unsigned int)
 #define VOW_GET_GOOGLE_ARCH           _IOW(VOW_IOC_MAGIC, 0x13, unsigned int)
+#define VOW_READ_VOICE_DATA           _IOW(VOW_IOC_MAGIC, 0x17, unsigned int)
 
 #ifdef CONFIG_MTK_VOW_BARGE_IN_SUPPORT
 
@@ -170,7 +171,6 @@ enum { /* dump_data_t */
  *****************************************************************************/
 enum vow_control_cmd_t {
 	VOWControlCmd_Init = 0,
-	VOWControlCmd_ReadVoiceData,
 	VOWControlCmd_EnableDebug,
 	VOWControlCmd_DisableDebug,
 	VOWControlCmd_EnableSeamlessRecord,

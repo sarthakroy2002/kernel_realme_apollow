@@ -914,4 +914,6 @@ s32 cmdq_op_read_mem(struct cmdqRecStruct *handle,
 	cmdqBackupSlotHandle h_backup_slot, u32 slot_index,
 	CMDQ_VARIABLE *arg_out);
 
+s32 cmdq_op_read_mem_to_mem(struct cmdqRecStruct *handle,
+		cmdqBackupSlotHandle h_backup_slot, u32 slot_index, u32 addr);
 #endif	/* __CMDQ_RECORD_H__ */

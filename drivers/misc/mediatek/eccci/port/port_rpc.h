@@ -260,4 +260,6 @@ extern int IMM_GetOneChannelValue(int dwChannel, int data[4], int *rawdata);
 extern bool is_clk_buf_from_pmic(void);
 extern void clk_buf_get_rf_drv_curr(void *rf_drv_curr);
 extern void clk_buf_save_afc_val(unsigned int afcdac);
+extern unsigned int is_project(int project);
+extern int gpio_get_tristate_input(unsigned int pin);
 #endif	/* __PORT_RPC_H__ */

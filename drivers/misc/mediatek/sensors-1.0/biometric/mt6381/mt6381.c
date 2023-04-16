@@ -3431,7 +3431,6 @@ static struct i2c_driver mt6381_i2c_driver = {
 	.driver = {
 		   .owner = THIS_MODULE,
 		   .name = MT6381_DEV_NAME,
-/* #ifdef CONFIG_PM_SLEEP */
 #if 0
 		   .pm = &lsm6ds3h_pm_ops,
 #endif

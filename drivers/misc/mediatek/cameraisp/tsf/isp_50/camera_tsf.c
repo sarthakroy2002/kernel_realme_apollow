@@ -40,7 +40,6 @@
 /* #include <mach/mt_reg_base.h> */
 /* #if defined(CONFIG_MTK_LEGACY) */
 /* #include <mach/mt_clkmgr.h> */
-/* #endif */
 #include <mt-plat/sync_write.h>	/* For mt65xx_reg_sync_writel(). */
 /* #include <mach/mt_spm_idle.h>  For spm_enable_sodi()/spm_disable_sodi(). */
 

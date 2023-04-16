@@ -2465,7 +2465,6 @@ void musb_host_rx(struct musb *musb, u8 epnum)
 
 			dma->desired_mode = 0;
 #if 0
-/* #ifdef USE_MODE1 */
 			/* because of the issue below, mode 1 will
 			 * only rarely behave with correct semantics.
 			 */
@@ -2897,7 +2896,7 @@ static int
 	 * we don't (yet!) support high bandwidth interrupt transfers.
 	 */
 	if (qh->type == USB_ENDPOINT_XFER_ISOC) {
-		qh->hb_mult = 1 + ((qh->maxpacket >> 11) & 0x03);
+		qh->hb_mult = usb_endpoint_maxp_mult(epd);
 		if (qh->hb_mult > 1) {
 			int ok = (qh->type == USB_ENDPOINT_XFER_ISOC);
 

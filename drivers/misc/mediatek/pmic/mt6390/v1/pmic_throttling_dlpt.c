@@ -1661,7 +1661,6 @@ static DEVICE_ATTR(dlpt_level, 0664, show_dlpt_level, store_dlpt_level);
  * system function
  ******************************************************************************/
 #if 1
-//#ifdef DLPT_FEATURE_SUPPORT
 static unsigned long pmic_node;
 
 static int fb_early_init_dt_get_chosen(
@@ -1874,7 +1873,6 @@ int pmic_throttling_dlpt_init(struct platform_device *pdev)
 static int __init pmic_throttling_dlpt_rac_init(void)
 {
 #if 1
-// #ifdef DLPT_FEATURE_SUPPORT
 	const int *pimix = NULL;
 	int len = 0;
 

@@ -45,12 +45,17 @@
 #include "logging.h"
 #include "nq.h"
 
+#include <soc/oppo/oppo_project.h>
+
 #define NQ_NUM_ELEMS		64
 #define DEFAULT_TIMEOUT_MS	20000	/* We do nothing on timeout anyway */
 
 #if !defined(NQ_TEE_WORKER_THREADS)
 #define NQ_TEE_WORKER_THREADS	1
 #endif
+
+//#Bin.Li@BSP.Fingerprint.Secure 2019/08/16, Modify for keymaster fail by Drandroid crash
+extern int phx_is_system_boot_completed(void);
 
 static struct {
 	struct mutex buffer_mutex;	/* Lock on SWd communication buffer */
@@ -275,7 +280,8 @@ static int irq_bh_worker(void *arg)
 		/* This is needed to properly handle secure interrupts when */
 		/* there is no active worker.                               */
 		if (!get_workers())
-			wake_up(&l_ctx.workers_wq);
+			wake_up_process(
+				l_ctx.tee_worker[NQ_TEE_WORKER_THREADS - 1]);
 	}
 	return 0;
 }
@@ -384,7 +390,7 @@ int nq_session_notify(struct nq_session *session, u32 id, u32 payload)
 		if (fc_nsiq(session->id, payload))
 			ret = -EPROTO;
 		tee_restore_affinity(old_affinity);
-		wake_up(&l_ctx.workers_wq);
+		wake_up_process(l_ctx.tee_worker[NQ_TEE_WORKER_THREADS - 1]);
 		logging_run();
 	}
 
@@ -502,6 +508,9 @@ static void nq_dump_status(void)
 	size_t i;
 	cpumask_t old_affinity;
 
+//#Bin.Li@BSP.Fingerprint.Secure 2019/08/16, Modify for keymaster fail by Drandroid crash
+	int boot_completed_tee = 0;
+
 	if (l_ctx.dump.off)
 		ret = -EBUSY;
 
@@ -547,6 +556,15 @@ static void nq_dump_status(void)
 	tee_restore_affinity(old_affinity);
 
 	mc_dev_info("  %-22s= 0x%s", "mcExcep.uuid", uuid_str);
+	//#Bin.Li@BSP.Fingerprint.Secure 2019/08/16, Modify for keymaster fail by Drandroid crash
+	if(0 == strcmp(uuid_str, "07170000000000000000000000000000")) {
+		boot_completed_tee = phx_is_system_boot_completed();
+		if(boot_completed_tee == 1) {
+			mc_dev_info("tee boot complete\n");
+		} else {
+			BUG();
+		}
+	}
 	if (ret >= 0)
 		ret = kasnprintf(&l_ctx.dump, "%-22s= 0x%s\n", "mcExcep.uuid",
 				 uuid_str);
@@ -746,7 +764,7 @@ out:
 
 static int tee_wait_infinite(void)
 {
-	return wait_event_interruptible(l_ctx.workers_wq,
+	return wait_event_interruptible_exclusive(l_ctx.workers_wq,
 					!l_ctx.tee_scheduler_run ||
 					get_workers() < get_required_workers());
 }
@@ -938,9 +956,15 @@ static s32 tee_schedule(uintptr_t arg, unsigned int *timeout_ms)
 
 		/* If SWd has more threads to run, then add a worker */
 		if (run < req_workers && run < NQ_TEE_WORKER_THREADS) {
+			int i = 0;
 			mc_dev_devel("[%d] R1 run=%d sc=%d", id, run,
 				     req_workers);
-			wake_up(&l_ctx.workers_wq);
+			while ((i < NQ_TEE_WORKER_THREADS)) {
+				if (wake_up_process(
+			    l_ctx.tee_worker[NQ_TEE_WORKER_THREADS - 1 - i]))
+					break;
+				i++;
+			}
 		}
 
 		/* If SWd has less threads to run, then current worker */

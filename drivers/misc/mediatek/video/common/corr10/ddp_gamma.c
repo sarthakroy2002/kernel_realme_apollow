@@ -996,7 +996,6 @@ static int disp_ccorr_config(enum DISP_MODULE_ENUM module,
 
 	return 0;
 }
-
 int disp_ccorr_set_color_matrix(void *cmdq, int32_t matrix[16], int32_t hint)
 {
 	int ret = 0;

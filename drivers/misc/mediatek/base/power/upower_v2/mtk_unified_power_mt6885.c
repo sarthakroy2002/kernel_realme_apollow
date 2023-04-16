@@ -63,7 +63,6 @@
 	(((_val_) & (BITMASK(_bits_))) >> ((0) ? _bits_))
 /* #if (NR_UPOWER_TBL_LIST <= 1) */
 struct upower_tbl final_upower_tbl[NR_UPOWER_BANK] = {};
-/* #endif */
 
 int degree_set[NR_UPOWER_DEGREE] = {
 		UPOWER_DEGREE_0,

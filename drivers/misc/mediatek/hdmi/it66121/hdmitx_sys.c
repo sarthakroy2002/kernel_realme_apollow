@@ -590,17 +590,14 @@ void HDMITX_SetOutput(void)
 		/* if( bAudioEnable ) */
 		/* { */
 		/* ConfigAudioInfoFrm(); */
-		/* #ifdef SUPPORT_HBR_AUDIO */
 		/* HDMITX_EnableAudioOutput(T_AUDIO_HBR,*/
 		/* CONFIG_INPUT_AUDIO_SPDIF, 768000L,8,NULL,TMDSClock); */
-		/* #else */
 		/*  HDMITX_EnableAudioOutput(T_AUDIO_LPCM, FALSE, */
 		/*  ulAudioSampleFS,OUTPUT_CHANNEL,NULL,TMDSClock); */
 		/* HDMITX_EnableAudioOutput(CNOFIG_INPUT_AUDIO_TYPE, */
 		/*  CONFIG_INPUT_AUDIO_SPDIF,
 		 * ulAudioSampleFS,bOutputAudioChannel,NULL,TMDSClock);
 		 */
-		/* #endif */
 		/* } */
 
 	} else {

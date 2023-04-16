@@ -152,11 +152,9 @@ static int ccu_i2c_probe_main(struct i2c_client *client,
 	g_ccuI2cClientMain = client;
 
 	/* set I2C clock rate */
-	/*#ifdef CONFIG_MTK_I2C_EXTENSION*/
 	/*g_pstI2Cclient3->timing = 100;*/ /* 100k */
 	/* No I2C polling busy waiting */
 	/*g_pstI2Cclient3->ext_flag &= ~I2C_POLLING_FLAG;*/
-	/*#endif*/
 
 	LOG_DBG("[ccu_i2c_probe] Attached!!\n");
 	return 0;
@@ -174,11 +172,9 @@ static int ccu_i2c_probe_main3(struct i2c_client *client,
 	g_ccuI2cClientMain3 = client;
 
 	/* set I2C clock rate */
-	/*#ifdef CONFIG_MTK_I2C_EXTENSION*/
 	/*g_pstI2Cclient3->timing = 100;*/ /* 100k */
 	/* No I2C polling busy waiting */
 	/*g_pstI2Cclient3->ext_flag &= ~I2C_POLLING_FLAG;*/
-	/*#endif*/
 
 	LOG_DBG("[ccu_i2c_probe] Attached!!\n");
 	return 0;

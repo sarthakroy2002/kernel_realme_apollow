@@ -66,6 +66,9 @@
 #define SCP_READY_TIMEOUT (8 * HZ) /* 30 seconds*/
 #define SCP_A_TIMER 0
 
+#ifdef CONFIG_OPLUS_FEATURE_FEEDBACK
+#include <soc/oplus/system/kernel_fb.h>
+#endif
 /* scp ipi message buffer */
 uint32_t msg_scp_ready0, msg_scp_ready1;
 char msg_scp_err_info0[40], msg_scp_err_info1[40];
@@ -481,8 +484,13 @@ static void scp_A_set_ready(void)
 static void scp_wait_ready_timeout(unsigned long data)
 {
 #if SCP_RECOVERY_SUPPORT
-	if (scp_timeout_times < 10)
+//Chao.Zeng@PSW.BSP.Sensor add for store EE case ALPS05402851
+	//if (scp_timeout_times < 10)
+	if (scp_timeout_times < 3){
 		scp_send_reset_wq(RESET_TYPE_TIMEOUT);
+	} else {
+		__pm_relax(&scp_reset_lock);
+	}
 #endif
 	scp_timeout_times++;
 	pr_notice("[SCP] scp_timeout_times=%x\n", scp_timeout_times);
@@ -543,10 +551,12 @@ static void scp_err_info_handler(int id, void *prdata, void *data,
 
 	/* Ensure the context[] is terminated by the NULL character. */
 	info->context[ERR_MAX_CONTEXT_LEN - 1] = '\0';
-	pr_notice("[SCP] Error_info: case id: %u\n", info->case_id);
-	pr_notice("[SCP] Error_info: sensor id: %u\n", info->sensor_id);
-	pr_notice("[SCP] Error_info: context: %s\n", info->context);
-
+	pr_err("[SCP] Error_info: case id: %u\n", info->case_id);
+	pr_err("[SCP] Error_info: sensor id: %u\n", info->sensor_id);
+	pr_err("[SCP] Error_info: context: %s\n", info->context);
+#ifdef CONFIG_OPLUS_FEATURE_FEEDBACK
+	oplus_kevent_fb_str(FB_SENSOR, "10005", info->context);
+#endif
 	if (report_hub_dmd)
 		report_hub_dmd(info->case_id, info->sensor_id, info->context);
 	else

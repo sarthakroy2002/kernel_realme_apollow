@@ -1077,7 +1077,6 @@ void fpsgo_comp2fstb_queue_time_update(int pid, unsigned long long bufID,
 		new_frame_info->gblock_time = 0ULL;
 		new_frame_info->fps_raise_flag = 0;
 		new_frame_info->vote_i = 0;
-		new_frame_info->render_idle_cnt = 0;
 
 		rcu_read_lock();
 		tsk = find_task_by_vpid(pid);
@@ -1244,20 +1243,16 @@ static int fstb_get_queue_fps1(struct FSTB_FRAME_INFO *iter,
 	if (avg_frame_interval != 0) {
 		retval = 1000000000ULL * frame_interval_count;
 		do_div(retval, avg_frame_interval);
-		if (frame_interval_count < DISPLAY_FPS_FILTER_NUM)
-			retval = -1;
+		mtk_fstb_dprintk("%s  %d %llu\n",
+				__func__, iter->pid, retval);
 		fpsgo_systrace_c_fstb_man(iter->pid, iter->bufid, (int)retval,
 			"queue_fps");
 		return retval;
 	}
-	if (iter->queue_fps == -1 || frame_count)
-		retval = -1;
-	else
-		retval = 0;
-	fpsgo_systrace_c_fstb_man(iter->pid, iter->bufid,
-			retval, "queue_fps");
+	mtk_fstb_dprintk("%s  %d %d\n", __func__, iter->pid, 0);
+	fpsgo_systrace_c_fstb_man(iter->pid, iter->bufid, 0, "queue_fps");
 
-	return retval;
+	return 0;
 }
 
 static int fps_update(struct FSTB_FRAME_INFO *iter)
@@ -1498,7 +1493,7 @@ void fpsgo_fbt2fstb_query_fps(int pid, unsigned long long bufID,
 		else
 			v_c_time = total_time;
 
-		if (iter->queue_fps == -1)
+		if (iter->queue_fps <= 0)
 			*target_fps = -1;
 	}
 
@@ -1552,6 +1547,9 @@ static void fstb_fps_stats(struct work_struct *work)
 				iter->target_fps_margin_dbnc_b,
 				"target_fps_margin_dbnc_b");
 
+			// ged_kpi_set_target_FPS_margin(iter->bufid,
+			// iter->target_fps, iter->target_fps_margin);
+
 			mtk_fstb_dprintk(
 			"%s pid:%d target_fps:%d\n",
 			__func__, iter->pid,
@@ -1559,32 +1557,7 @@ static void fstb_fps_stats(struct work_struct *work)
 
 			if (max_target_fps < iter->target_fps)
 				max_target_fps = iter->target_fps;
-
-			iter->render_idle_cnt = 0;
 			/* if queue fps == 0, we delete that frame_info */
-		} else {
-			iter->render_idle_cnt++;
-			if (iter->render_idle_cnt < FSTB_IDLE_DBNC) {
-
-				iter->target_fps =
-					calculate_fps_limit(iter, target_fps);
-				mtk_fstb_dprintk(
-						"%s pid:%d target_fps:%d\n",
-						__func__, iter->pid,
-						iter->target_fps);
-				continue;
-			}
-
-			hlist_del(&iter->hlist);
-
-			{
-				struct pob_fpsgo_qtsk_info pffi = {iter->pid};
-
-				pob_fpsgo_qtsk_update(POB_FPSGO_QTSK_DEL,
-						&pffi);
-			}
-
-			vfree(iter);
 		}
 	}
 
@@ -1599,6 +1572,18 @@ static void fstb_fps_stats(struct work_struct *work)
 	if (fstb_idle_cnt >= FSTB_IDLE_DBNC) {
 		fstb_active_dbncd = 0;
 		fstb_idle_cnt = 0;
+		hlist_for_each_entry_safe(iter, n, &fstb_frame_infos, hlist) {
+			hlist_del(&iter->hlist);
+
+			{
+				struct pob_fpsgo_qtsk_info pffi = {iter->pid};
+
+				pob_fpsgo_qtsk_update(POB_FPSGO_QTSK_DEL,
+						&pffi);
+			}
+
+			vfree(iter);
+		}
 	} else if (fstb_idle_cnt >= 2) {
 		fstb_active = 0;
 	}

@@ -110,7 +110,6 @@
 #endif
 
 
-/* #ifdef CONFIG_OF */
 struct JpegDeviceStruct {
 
 	struct device *pDev;
@@ -133,7 +132,6 @@ const long jpeg_dev_get_hybrid_decoder_base_VA(int id);
 
 const int jpeg_dev_get_hybrid_decoder_id(unsigned int pa);
 
-/* #endif */
 
 #ifndef CONFIG_MTK_CLKMGR
 struct JpegClk {
@@ -605,6 +603,10 @@ struct JPEG_ENC_DRV_IN {
 	unsigned int totalEncDU;
 	unsigned int dstBufAddrOffset;
 	unsigned int dstBufAddrOffsetMask;
+	int srcFd;
+	int srcFd2;
+	int dstFd;
+	unsigned int memHeight;
 #ifdef CONFIG_MTK_SEC_JPEG_SUPPORT
 	bool		 bSecure;
 #endif

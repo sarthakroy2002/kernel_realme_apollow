@@ -2861,7 +2861,6 @@ out:
 }
 #endif
 
-/*#ifdef TO_BE_IMPL*/
 int m4u_larb_backup_sec(unsigned int larb_idx)
 {
 	int ret;

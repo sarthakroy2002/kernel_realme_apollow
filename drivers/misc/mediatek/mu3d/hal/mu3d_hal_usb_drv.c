@@ -846,7 +846,6 @@ void mu3d_hal_det_speed(enum USB_SPEED speed, unsigned char det_speed)
 
 	pr_debug("===Start polling===\n");
 
-	/* #ifdef EXT_VBUS_DET */
 	if (!det_speed) {
 		while (!(os_readl(U3D_DEV_LINK_INTR) & SSUSB_DEV_SPEED_CHG_INTR)) {
 			os_ms_delay(1);
@@ -861,9 +860,7 @@ void mu3d_hal_det_speed(enum USB_SPEED speed, unsigned char det_speed)
 		while (!(os_readl(U3D_DEV_LINK_INTR) & SSUSB_DEV_SPEED_CHG_INTR))
 			;
 	}
-	/* #else */
 	/* while(!(os_readl(U3D_DEV_LINK_INTR) & SSUSB_DEV_SPEED_CHG_INTR)); */
-	/* #endif */
 
 	pr_debug("===Polling End===\n");
 

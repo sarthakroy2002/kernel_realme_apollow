@@ -153,6 +153,9 @@ struct head_dts_data {
 	unsigned int moisture_comp_vth;
 	unsigned int moisture_comp_vref2;
 	unsigned int moisture_use_ext_res;
+#ifdef OPLUS_BUG_COMPATIBILITY
+	unsigned int eint_comparator;
+#endif
 };
 
 enum {
@@ -180,6 +183,6 @@ void mt_accdet_resume(void);
 int mt_accdet_probe(struct platform_device *dev);
 long mt_accdet_unlocked_ioctl(struct file *file,
 	unsigned int cmd, unsigned long arg);
-
+void __attribute__((weak)) switch_headset_state(int headset_state) {return;};
 #endif
 

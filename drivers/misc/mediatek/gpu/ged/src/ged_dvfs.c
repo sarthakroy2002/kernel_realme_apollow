@@ -44,6 +44,10 @@
 #include "ged_base.h"
 #include "ged_global.h"
 
+#ifdef CONFIG_OPLUS_FEATURE_MIDAS
+#include "ged_oppo_ex.h"
+#endif
+
 #define MTK_DEFER_DVFS_WORK_MS          10000
 #define MTK_DVFS_SWITCH_INTERVAL_MS     50
 
@@ -66,7 +70,6 @@ static int g_dvfs_skip_round;
 static unsigned int gpu_power;
 static unsigned int gpu_dvfs_enable;
 static unsigned int gpu_debug_enable;
-static unsigned int g_lb_down_count = 1;
 #ifdef CONFIG_MTK_GPU_OPP_STATS_SUPPORT
 static struct GED_DVFS_OPP_STAT *g_aOppStat;
 static int g_num;
@@ -350,6 +353,9 @@ bool ged_dvfs_cal_gpu_utilization(unsigned int *pui32Loading,
 	unsigned long long TS_p_on_us;
 	unsigned int oppLoading;
 	unsigned long ui32IRQFlags;
+#ifdef CONFIG_OPLUS_FEATURE_MIDAS
+	struct oppo_opp_record opp_rec;
+#endif
 
 #ifdef GED_ENABLE_DVFS_LOADING_MODE
 	if (ged_dvfs_cal_gpu_utilization_ex_fp != NULL) {
@@ -396,14 +402,19 @@ bool ged_dvfs_cal_gpu_utilization(unsigned int *pui32Loading,
 			/* the minus one should be clock
 			 * reference problem between threads
 			 */
-#ifdef CONFIG_MTK_GPU_OPP_STATS_SUPPORT
-			if (TS_base_us < TS_us)
+			if (TS_base_us < TS_us) {
 				ged_dvfs_update_opp_cost(
 				oppLoading,
 				(TS_us - TS_base_us),
 				TS_us,
 				g_ui32CurFreqID);
-#endif
+				#ifdef CONFIG_OPLUS_FEATURE_MIDAS
+				opp_rec.loading = oppLoading;
+				opp_rec.last_timestamp = ged_get_time();
+				opp_rec.oppidx = g_ui32CurFreqID;
+				oppo_update_opp_record(&opp_rec);
+				#endif
+			}
 
 		}
 		return true;
@@ -984,7 +995,6 @@ static void ged_dvfs_trigger_fb_dvfs(void)
 	is_fb_dvfs_triggered = 1;
 }
 /*
- *  frame-based entry point
  *	t_gpu, t_gpu_target in ms * 10
  */
 static int ged_dvfs_fb_gpu_dvfs(int t_gpu, int t_gpu_target,
@@ -1018,7 +1028,6 @@ static int ged_dvfs_fb_gpu_dvfs(int t_gpu, int t_gpu_target,
 		force_fallback_pre = force_fallback;
 #ifdef GED_CONFIGURE_LOADING_BASE_DVFS_STEP
 		if (force_fallback == 1) {
-			g_lb_down_count = 1;
 			int i32NewFreqID =
 			(int) mt_gpufreq_get_cur_freq_index();
 
@@ -1237,7 +1246,6 @@ static int _loading_avg(int ui32loading)
 	return sum / ARRAY_SIZE(data);
 }
 
-/* loading-based entry point*/
 static bool ged_dvfs_policy(
 		unsigned int ui32GPULoading, unsigned int *pui32NewFreqID,
 		unsigned long t, long phase, unsigned long ul3DFenceDoneTime,
@@ -1435,9 +1443,7 @@ static bool ged_dvfs_policy(
 #endif
 
 		ui32GPULoading_avg = _loading_avg(ui32GPULoading);
-		if (ui32GPULoading >= 110 - gx_tb_dvfs_margin_cur
-		 || ui32GPULoading >= 96) {
-
+		if (ui32GPULoading >= 110 - gx_tb_dvfs_margin_cur) {
 #ifdef GED_CONFIGURE_LOADING_BASE_DVFS_STEP
 			if (dvfs_step_mode == 0)
 				i32NewFreqID = 0;
@@ -1449,16 +1455,9 @@ static bool ged_dvfs_policy(
 #else
 			i32NewFreqID = 0;
 #endif
-			g_lb_down_count = 1;
-		} else if (ui32GPULoading < 15) {
-			i32NewFreqID += g_lb_down_count;
-			g_lb_down_count *= 2;
-			if (g_lb_down_count >= 4)
-				g_lb_down_count = 4;
 		} else if (ui32GPULoading_avg >=
 			loading_ud_table[ui32GPUFreq].up) {
 			i32NewFreqID -= 1;
-			g_lb_down_count = 1;
 		} else if (ui32GPULoading_avg <=
 			loading_ud_table[ui32GPUFreq].down) {
 			i32NewFreqID += 1;
@@ -2196,19 +2195,30 @@ int ged_dvfs_query_opp_cost(struct GED_DVFS_OPP_STAT *psReport,
 	return -1;
 }
 
+#ifdef CONFIG_OPLUS_FEATURE_MIDAS
+struct GED_DVFS_OPP_STAT *ged_dvfs_query_opp_status(void)
+{
+      struct GED_DVFS_OPP_STAT *report;
+      const unsigned int size = sizeof(struct GED_DVFS_OPP_STAT) * g_num;
+
+      report = vmalloc(size);
+      if (g_aOppStat && report)
+          memcpy(report, g_aOppStat, g_num*sizeof(struct GED_DVFS_OPP_STAT));
+
+        return report;
+}
+#endif
+
 void ged_dvfs_update_opp_cost(unsigned int loading,
 	unsigned int TSDiff_us, unsigned long long cur_us, unsigned int idx)
 {
 	unsigned int Active_us;
-	(void) cur_us;
-
 	if (g_aOppStat) {
 		Active_us = (TSDiff_us * loading / 100);
 		/* update opp busy */
 		g_aOppStat[idx].ui64Active += Active_us;
 		g_aOppStat[idx].ui64Idle += (TSDiff_us - Active_us);
 	}
-
 }
 
 int ged_dvfs_init_opp_cost(void)
@@ -2228,6 +2238,10 @@ int ged_dvfs_init_opp_cost(void)
 
 	g_num = oppsize;
 	ged_dvfs_reset_opp_cost(oppsize);
+
+#ifdef CONFIG_OPLUS_FEATURE_MIDAS
+	oppo_init_oppo_rec(&g_num);
+#endif
 
 	return 0;
 }

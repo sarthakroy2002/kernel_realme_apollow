@@ -3909,7 +3909,6 @@ int vpu_dump_image_file(struct seq_file *s, struct vpu_device *gvpu_device)
 
 	vpu_print_seq(s, "%s", line_bar);
 
-/* #ifdef MTK_VPU_DUMP_BINARY */
 #if 0
 	{
 		uint32_t dump_1k_size = (0x00000400);
@@ -4379,7 +4378,7 @@ int vpu_dump_util(struct seq_file *s, struct vpu_device *gvpu_device)
 }
 
 int vpu_set_power_parameter(struct vpu_device *vpu_device, uint8_t param,
-				int argc, int *args)
+				int argc, unsigned int *args)
 {
 	int ret = 0;
 

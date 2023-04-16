@@ -53,17 +53,13 @@
 
 #include "st21nfc/st21nfc.h"
 
-// #ifdef ST21NFCD_MTK
 /*
  * Define WITH_SPI_CLK_MNGT for integrations
  * where the SPI clock needs to be enabled on request
  */
 // #define WITH_SPI_CLK_MNGT 1
-// #ifdef WITH_SPI_CLK_MNGT
 // extern void mt_spi_enable_master_clk(struct spi_device *spidev);
 // extern void mt_spi_disable_master_clk(struct spi_device *spidev);
-// #endif  // WITH_SPI_CLK_MNGT
-// #endif //ST21NFCD_MTK
 
 /*
  * This supports access to SPI devices using normal userspace I/O calls.

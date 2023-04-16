@@ -33,17 +33,11 @@
 //#define IMAGE_V_MIRROR
 #define IMAGE_HV_MIRROR
 
-//#ifdef IMAGE_NORMAL_MIRROR
 //#define MIRROR 0x80
-//#endif
 
-//#ifdef IMAGE_H_MIRROR
 //#define MIRROR 0x81
-//#endif
 
-//#ifdef IMAGE_V_MIRROR
 //#define MIRROR 0x82
-//#endif
 
 #ifdef IMAGE_HV_MIRROR
 #define MIRROR 0x83

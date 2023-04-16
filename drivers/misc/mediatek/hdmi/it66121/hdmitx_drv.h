@@ -849,9 +849,7 @@ extern unsigned char bCSCMtx_YUV2RGB_ITU709_0_255[];
 #endif /* DISABLE_HDMITX_CSC */
 
 /* TBD ... */
-/* #ifdef SUPPORT_DEGEN */
 /* bool ProgramDEGenModeByID(MODE_ID id,unsigned char bInputSignalType); */
-/* #endif // SUPPORT_DEGEN */
 
 #ifdef SUPPORT_SYNCEMBEDDED
 bool setHDMITX_SyncEmbeddedByVIC(unsigned char VIC,

@@ -119,7 +119,6 @@ static const struct i2c_device_id tps65132_id[] = {
 
 /* #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)) */
 /* static struct i2c_client_address_data addr_data = { .forces = forces,}; */
-/* #endif */
 static struct i2c_driver tps65132_iic_driver = {
 	.id_table = tps65132_id,
 	.probe = tps65132_probe,

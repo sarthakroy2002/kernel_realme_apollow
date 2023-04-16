@@ -36,12 +36,6 @@
 #include <linux/sched.h>
 #include <uapi/linux/sched/types.h>
 
-#if IS_ENABLED(CONFIG_MTK_ENG_BUILD)
-#define trusty_dbg(dev, fmt, ...) dev_dbg(dev, fmt, ##__VA_ARGS__)
-#else
-#define trusty_dbg(dev, fmt, ...)
-#endif
-
 #define  RSC_DESCR_VER  1
 
 /* 0 is no bind */
@@ -117,7 +111,8 @@ static void check_all_vqs(struct trusty_ctx *tctx)
 	list_for_each_entry(tvdev, &tctx->vdev_list, node) {
 		for (i = 0; i < tvdev->vring_num; i++) {
 			/* vq->vq.callback(&vq->vq);  trusty_virtio_notify */
-			vring_interrupt(0, tvdev->vrings[i].vq);
+			if (tvdev->vrings[i].vq)
+				vring_interrupt(0, tvdev->vrings[i].vq);
 		}
 	}
 }
@@ -230,7 +225,7 @@ static void kick_vq(struct trusty_ctx *tctx,
 	int ret;
 	u32 smcnr_kick_vq = MTEE_SMCNR(SMCF_SC_VDEV_KICK_VQ, tctx->trusty_dev);
 
-	trusty_dbg(tctx->dev, "%s: vdev_id=%d: vq_id=%d\n",
+	dev_dbg(tctx->dev, "%s: vdev_id=%d: vq_id=%d\n",
 		__func__, tvdev->notifyid, tvr->notifyid);
 
 	ret = trusty_std_call32(tctx->trusty_dev, smcnr_kick_vq,
@@ -283,7 +278,7 @@ static int trusty_load_device_descr(struct trusty_ctx *tctx,
 	u32 smcnr_get_descr = MTEE_SMCNR(SMCF_SC_VIRTIO_GET_DESCR,
 					 tctx->trusty_dev);
 
-	trusty_dbg(tctx->dev, "%s: %zu bytes @ %p\n", __func__, sz, va);
+	dev_dbg(tctx->dev, "%s: %zu bytes @ %p\n", __func__, sz, va);
 
 	ret = trusty_call32_mem_buf(tctx->trusty_dev, smcnr_get_descr,
 				    virt_to_page(va), sz, PAGE_KERNEL);
@@ -301,7 +296,7 @@ static void trusty_virtio_stop(struct trusty_ctx *tctx, void *va, size_t sz)
 	u32 smcnr_virtio_stop = MTEE_SMCNR(SMCF_SC_VIRTIO_STOP,
 					   tctx->trusty_dev);
 
-	trusty_dbg(tctx->dev, "%s: %zu bytes @ %p\n", __func__, sz, va);
+	dev_dbg(tctx->dev, "%s: %zu bytes @ %p\n", __func__, sz, va);
 
 	ret = trusty_call32_mem_buf(tctx->trusty_dev, smcnr_virtio_stop,
 				    virt_to_page(va), sz, PAGE_KERNEL);
@@ -318,7 +313,7 @@ static int trusty_virtio_start(struct trusty_ctx *tctx, void *va, size_t sz)
 	u32 smcnr_virtio_start = MTEE_SMCNR(SMCF_SC_VIRTIO_START,
 					    tctx->trusty_dev);
 
-	trusty_dbg(tctx->dev, "%s: %zu bytes @ %p\n", __func__, sz, va);
+	dev_dbg(tctx->dev, "%s: %zu bytes @ %p\n", __func__, sz, va);
 
 	ret = trusty_call32_mem_buf(tctx->trusty_dev, smcnr_virtio_start,
 				    virt_to_page(va), sz, PAGE_KERNEL);
@@ -336,7 +331,7 @@ static void trusty_virtio_reset(struct virtio_device *vdev)
 	struct trusty_ctx *tctx = tvdev->tctx;
 	u32 smcnr_vdev_reset = MTEE_SMCNR(SMCF_SC_VDEV_RESET, tctx->trusty_dev);
 
-	trusty_dbg(&vdev->dev, "reset vdev_id=%d\n", tvdev->notifyid);
+	dev_dbg(&vdev->dev, "reset vdev_id=%d\n", tvdev->notifyid);
 
 	trusty_std_call32(tctx->trusty_dev, smcnr_vdev_reset,
 			  tvdev->notifyid, 0, 0);
@@ -366,7 +361,7 @@ static void trusty_virtio_get_config(struct virtio_device *vdev,
 {
 	struct trusty_vdev *tvdev = vdev_to_tvdev(vdev);
 
-	trusty_dbg(&vdev->dev, "%s: %d bytes @ offset %d\n",
+	dev_dbg(&vdev->dev, "%s: %d bytes @ offset %d\n",
 		__func__, len, offset);
 
 	if (tvdev->config) {
@@ -379,7 +374,7 @@ static void trusty_virtio_set_config(struct virtio_device *vdev,
 				     unsigned int offset, const void *buf,
 				     unsigned int len)
 {
-	trusty_dbg(&vdev->dev, "%s\n", __func__);
+	dev_dbg(&vdev->dev, "%s\n", __func__);
 }
 
 static u8 trusty_virtio_get_status(struct virtio_device *vdev)
@@ -421,7 +416,7 @@ static void _del_vqs(struct virtio_device *vdev)
 
 static void trusty_virtio_del_vqs(struct virtio_device *vdev)
 {
-	trusty_dbg(&vdev->dev, "%s\n", __func__);
+	dev_dbg(&vdev->dev, "%s\n", __func__);
 	_del_vqs(vdev);
 }
 
@@ -462,7 +457,7 @@ static struct virtqueue *_find_vq(struct virtio_device *vdev,
 	 */
 	tvr->vr_descr->pa = (u32) ((u64) pa >> 32);
 
-	trusty_dbg(&vdev->dev, "vr%d: [%s] va(pa)  %p(%llx) qsz %d notifyid %d\n",
+	dev_dbg(&vdev->dev, "vr%d: [%s] va(pa)  %p(%llx) qsz %d notifyid %d\n",
 		id, name, tvr->vaddr, (u64)tvr->paddr, tvr->elem_num,
 		tvr->notifyid);
 

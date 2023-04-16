@@ -52,10 +52,8 @@
 #include <linux/of_irq.h>
 /*#include "mach/eint.h"*/
 
-/* #ifdef DPI_EXT_INREG32 */
 /* #undef DPI_EXT_INREG32 */
 #define DPI_EXT_INREG32(x)          (__raw_readl((unsigned long *)(x)))
-/* #endif */
 
 #define DPI_EXT_OUTREG32(cmdq, addr, val) \
 	{\

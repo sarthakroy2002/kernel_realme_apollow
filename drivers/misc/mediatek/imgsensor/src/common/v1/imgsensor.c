@@ -21,6 +21,7 @@
 #include <linux/workqueue.h>
 #include <linux/init.h>
 #include <linux/types.h>
+#include <soc/oplus/system/oppo_project.h>
 
 #undef CONFIG_MTK_SMI_EXT
 #ifdef CONFIG_MTK_SMI_EXT
@@ -69,6 +70,10 @@ static void cam_temperature_report_wq_routine(struct work_struct *);
 	struct delayed_work cam_temperature_wq;
 #endif
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+extern void oplus_chg_set_camera_status(bool val);
+#endif
+
 #define FEATURE_CONTROL_MAX_DATA_SIZE 128000
 
 struct platform_device *gpimgsensor_hw_platform_device;
@@ -87,6 +92,7 @@ struct mutex imgsensor_mutex;
 
 
 DEFINE_MUTEX(pinctrl_mutex);
+DEFINE_MUTEX(oc_mutex);
 
 /************************************************************************
  * Profiling
@@ -416,6 +422,10 @@ imgsensor_sensor_close(struct IMGSENSOR_SENSOR *psensor)
 
 		psensor_func->psensor_inst = psensor_inst;
 
+		if (pgimgsensor->imgsensor_oc_irq_enable != NULL)
+			pgimgsensor->imgsensor_oc_irq_enable(
+					psensor->inst.sensor_idx, false);
+
 		ret = psensor_func->SensorClose();
 		if (ret != ERROR_NONE) {
 			pr_err("[%s]", __func__);
@@ -503,9 +513,27 @@ int imgsensor_set_driver(struct IMGSENSOR_SENSOR *psensor)
 	char *driver_name = NULL;
 
 	imgsensor_mutex_init(psensor_inst);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if (pascal_project() == 4) {
+		imgsensor_i2c_init(&psensor_inst->i2c_cfg,
+			imgsensor_custom_config[(unsigned int)psensor->inst.sensor_idx].i2c_dev);
+	} else if(pascal_project() == 5) {
+		imgsensor_i2c_init(&psensor_inst->i2c_cfg,
+			imgsensor_custom_config_monetx[(unsigned int)psensor->inst.sensor_idx].i2c_dev);
+	} else {
+		imgsensor_i2c_init(&psensor_inst->i2c_cfg,
+			imgsensor_custom_config[(unsigned int)psensor->inst.sensor_idx].i2c_dev);
+	}
+	if (is_project(20761) || is_project(20762) || is_project(20764) || is_project(20766) || is_project(20767)) {
+		imgsensor_i2c_init(&psensor_inst->i2c_cfg,
+			imgsensor_custom_config_even[(unsigned int)psensor->inst.sensor_idx].i2c_dev);
+	}
+#else
 	imgsensor_i2c_init(&psensor_inst->i2c_cfg,
 	imgsensor_custom_config[
 	(unsigned int)psensor->inst.sensor_idx].i2c_dev);
+
+#endif /* OPLUS_FEATURE_CAMERA_COMMON */
 
 	imgsensor_i2c_filter_msg(&psensor_inst->i2c_cfg, true);
 
@@ -2537,6 +2565,11 @@ static int imgsensor_open(struct inode *a_pstInode, struct file *a_pstFile)
 		imgsensor_clk_enable_all(&pgimgsensor->clk);
 
 	atomic_inc(&pgimgsensor->imgsensor_open_cnt);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if(atomic_read(&pgimgsensor->imgsensor_open_cnt) > 0) {
+		oplus_chg_set_camera_status(true);
+	}
+#endif
 	pr_info(
 	    "%s %d\n",
 	    __func__,
@@ -2567,6 +2600,13 @@ static int imgsensor_release(struct inode *a_pstInode, struct file *a_pstFile)
 		imgsensor_dfs_ctrl(DFS_RELEASE, NULL);
 #endif
 	}
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	if(atomic_read(&pgimgsensor->imgsensor_open_cnt) == 0) {
+		oplus_chg_set_camera_status(false);
+	}
+#endif
+
 	pr_info(
 	    "%s %d\n",
 	    __func__,

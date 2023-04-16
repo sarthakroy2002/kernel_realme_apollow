@@ -29,7 +29,6 @@
 #define MAX_NR_FPS_LEVELS	1
 #define MAX_NR_RENDER_FPS_LEVELS	10
 #define DISPLAY_FPS_FILTER_NS 100000000ULL
-#define DISPLAY_FPS_FILTER_NUM 4
 #define ASFC_THRESHOLD_NS 20000000ULL
 #define ASFC_THRESHOLD_PERCENTAGE 30
 #define VPU_MAX_CAP 100
@@ -96,7 +95,6 @@ struct FSTB_FRAME_INFO {
 	unsigned long long gblock_b;
 	unsigned long long gblock_time;
 	int fps_raise_flag;
-	int render_idle_cnt;
 };
 
 struct FSTB_RENDER_TARGET_FPS {

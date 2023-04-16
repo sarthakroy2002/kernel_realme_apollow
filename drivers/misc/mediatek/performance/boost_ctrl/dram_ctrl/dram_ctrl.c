@@ -19,7 +19,6 @@
 /*if PM_DEVFREQ*/
 /* config: MTK_QOS_SUPPORT or VCORE_DVFS_OPP_SUPPORT */
 /* define in Makefile */
-/*#endif # PM_DEVFREQ*/
 
 #if defined(MTK_QOS_SUPPORT)
 #include <linux/pm_qos.h>

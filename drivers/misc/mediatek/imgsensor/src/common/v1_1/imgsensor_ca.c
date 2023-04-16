@@ -34,7 +34,6 @@ static struct TEEC_Session imgsensor_tci_session;
 
 /*#if defined(CONFIG_MICROTRUST_TEE_SUPPORT)*/
 /*const char* MY_UUID = "bta_loader";*/
-/*#endif*/
 
 /*
  * #if defined(CONFIG_TRUSTONIC_TEE_SUPPORT)
