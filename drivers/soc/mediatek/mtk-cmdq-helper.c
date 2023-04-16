@@ -21,7 +21,9 @@
 #endif
 
 #endif
-
+#ifdef MTK_DRM_ADVANCE
+extern bool oplus_dc_set;
+#endif
 #define CMDQ_ARG_A_WRITE_MASK	0xffff
 #define CMDQ_WRITE_ENABLE_MASK	BIT(0)
 #define CMDQ_EOC_IRQ_EN		BIT(0)
@@ -87,6 +89,7 @@ struct cmdq_flush_item {
 	cmdq_async_flush_cb err_cb;
 	void *err_data;
 	s32 err;
+	bool done;
 };
 
 static s8 cmdq_subsys_base_to_id(struct cmdq_base *clt_base, u32 base)
@@ -1250,8 +1253,14 @@ s32 cmdq_pkt_poll_timeout(struct cmdq_pkt *pkt, u32 value, u8 subsys,
 	cmdq_pkt_logic_command(pkt, CMDQ_LOGIC_ADD, reg_counter, &lop,
 		&rop);
 
+#ifdef MTK_DRM_ADVANCE
+	if (!oplus_dc_set) {
 	cmdq_pkt_sleep(pkt, CMDQ_POLL_TICK, reg_gpr);
-
+	oplus_dc_set = false;
+	}
+#else
+	cmdq_pkt_sleep(pkt, CMDQ_POLL_TICK, reg_gpr);
+#endif /* MTK_DRM_ADVANCE */
 	/* loop to begin */
 	if (absolute) {
 		cmd_pa = cmdq_pkt_get_pa_by_offset(pkt, begin_mark);
@@ -1606,6 +1615,7 @@ static void cmdq_flush_async_cb(struct cmdq_cb_data data)
 	if (item->cb)
 		item->cb(user_data);
 	complete(&pkt->cmplt);
+	item->done = true;
 }
 #endif
 
@@ -2350,7 +2360,8 @@ s32 cmdq_pkt_dump_buf(struct cmdq_pkt *pkt, dma_addr_t curr_pa)
 	list_for_each_entry(buf, &pkt->buf, list_entry) {
 		if (list_is_last(&buf->list_entry, &pkt->buf)) {
 			size = CMDQ_CMD_BUFFER_SIZE - pkt->avail_buf_size;
-		} else if (cnt > 2 && !(curr_pa >= buf->pa_base &&
+		//#ifndef OPLUS_BUG_STABILITY
+		/*} else if (cnt > 2 && !(curr_pa >= buf->pa_base &&
 			curr_pa < buf->pa_base + CMDQ_BUF_ALLOC_SIZE)) {
 			cmdq_util_msg(
 				"buffer %u va:0x%p pa:%pa %#018llx (skip detail) %#018llx",
@@ -2359,7 +2370,7 @@ s32 cmdq_pkt_dump_buf(struct cmdq_pkt *pkt, dma_addr_t curr_pa)
 				*((u64 *)(buf->va_base +
 				CMDQ_CMD_BUFFER_SIZE - CMDQ_INST_SIZE)));
 			cnt++;
-			continue;
+			continue;*/
 		} else {
 			size = CMDQ_CMD_BUFFER_SIZE;
 		}

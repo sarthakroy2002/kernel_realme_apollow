@@ -709,6 +709,13 @@ static irqreturn_t mtk_spi_interrupt(int irq, void *dev_id)
 	else
 		mdata->state = MTK_SPI_IDLE;
 
+	if (master->cur_msg == NULL) {
+		master->cur_msg_prepared = false;
+		kthread_queue_work(&master->kworker, &master->pump_messages);
+		spi_debug("mtk_spi_interrupt NULL == master->cur_msg\n");
+		return IRQ_HANDLED;
+	}
+
 	if (!master->can_dma(master, master->cur_msg->spi, trans)) {
 		if (trans->rx_buf) {
 			cnt = mdata->xfer_len / 4;

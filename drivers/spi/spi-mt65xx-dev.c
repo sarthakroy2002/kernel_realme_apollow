@@ -24,7 +24,6 @@
 #include <linux/clk.h>
 
 #if 0
-/* #ifdef CONFIG_TRUSTONIC_TEE_SUPPORT */
 #define SPI_TRUSTONIC_TEE_SUPPORT
 #endif
 
@@ -438,7 +437,6 @@ static ssize_t spi_store(struct device *dev, struct device_attribute *attr,
 	int dump_all, dump;
 	int index;
 #if 0
-/* #ifdef CONFIG_TRUSTONIC_TEE_SUPPORT */
 	u32 spinum;
 #endif
 
@@ -461,7 +459,6 @@ static ssize_t spi_store(struct device *dev, struct device_attribute *attr,
 	}
 
 #if 0
-/* #ifdef CONFIG_TRUSTONIC_TEE_SUPPORT */
 	if (!strncmp(buf, "send", 4)) {
 		if (sscanf(buf + 4, "%d", &spinum) == 1) {
 			pr_info("%s() start to access TL SPI driver.\n",
