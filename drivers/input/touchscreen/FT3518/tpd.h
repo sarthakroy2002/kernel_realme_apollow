@@ -138,13 +138,11 @@ struct tpd_driver_t {
 };
 
 
-				/* #ifdef TPD_HAVE_BUTTON */
 void tpd_button(unsigned int x, unsigned int y, unsigned int down);
 void tpd_button_init(void);
 ssize_t tpd_virtual_key(char *buf);
 /* #ifndef TPD_BUTTON_HEIGHT */
 /* #define TPD_BUTTON_HEIGHT TPD_RES_Y */
-/* #endif */
 
 
 extern int tpd_driver_add(struct tpd_driver_t *tpd_drv);

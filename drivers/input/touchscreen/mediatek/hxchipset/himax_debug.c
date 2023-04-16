@@ -950,7 +950,6 @@ void himax_log_touch_event_detail(struct himax_ts_data *ts, int x, int y, int w,
 		I("%s : wrong input!\n", __func__);
 	}
 }
-/* #endif */
 static ssize_t himax_diag_arrange_write(struct file *file, const char *buff,
 					size_t len, loff_t *pos)
 {

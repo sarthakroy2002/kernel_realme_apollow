@@ -35,11 +35,11 @@
 #define TPD_DEBUG_CODE
 /* #define TPD_DEBUG_TRACK */
 #define TPD_DMESG(a, arg...) \
-	pr_info(TPD_DEVICE ":[%s:%d] " a, __func__, __LINE__, ##arg)
+	pr_err(TPD_DEVICE ":[%s:%d] " a, __func__, __LINE__, ##arg)
 #if defined(TPD_DEBUG)
 #undef TPD_DEBUG
 #define TPD_DEBUG(a, arg...) \
-	pr_info(TPD_DEVICE ":[%s:%d] " a, __func__, __LINE__, ##arg)
+	pr_err(TPD_DEVICE ":[%s:%d] " a, __func__, __LINE__, ##arg)
 #else
 #define TPD_DEBUG(arg...)
 #endif
@@ -151,7 +151,6 @@ void tpd_button_init(void);
 ssize_t tpd_virtual_key(char *buf);
 /* #ifndef TPD_BUTTON_HEIGHT */
 /* #define TPD_BUTTON_HEIGHT TPD_RES_Y */
-/* #endif */
 #endif
 
 extern int tpd_driver_add(struct tpd_driver_t *tpd_drv);

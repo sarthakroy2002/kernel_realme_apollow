@@ -264,7 +264,6 @@ static long fts_rw_iic_drv_ioctl(struct file *filp, unsigned int cmd,
 	/* case FTS_RESET_TP: */
 	/* fts_reset_tp((int)arg); */
 	/* break; */
-	/* #endif */
 	default:
 		ret = -ENOTTY;
 		break;

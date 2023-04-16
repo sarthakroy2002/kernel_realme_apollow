@@ -114,7 +114,6 @@ static ssize_t fts_debug_write(struct file *filp, const char __user *buff,
 
 		/* #if FT_ESD_PROTECT */
 		/* esd_switch(0);apk_debug_flag = 1; */
-		/* #endif */
 		disable_irq(fts_i2c_client->irq);
 		ret = fts_ctpm_fw_upgrade_with_app_file(fts_i2c_client,
 							upgrade_file_path);
@@ -130,7 +129,6 @@ static ssize_t fts_debug_write(struct file *filp, const char __user *buff,
 		}
 		/* #if FT_ESD_PROTECT */
 		/* esd_switch(1);apk_debug_flag = 0; */
-		/* #endif */
 	} break;
 	/* case PROC_SET_TEST_FLAG: */
 

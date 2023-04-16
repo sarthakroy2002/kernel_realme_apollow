@@ -24,8 +24,6 @@ int tpd_calmat_size = 8;
 int tpd_def_calmat_size = 8;
 module_param_array(tpd_calmat, int, &tpd_calmat_size, 0664);
 module_param_array(tpd_def_calmat, int, &tpd_def_calmat_size, 0444);
-/* #endif */
-/* #ifdef TPD_TYPE_CAPACITIVE */
 int tpd_type_cap;
 
 int tpd_v_magnify_x = 10;

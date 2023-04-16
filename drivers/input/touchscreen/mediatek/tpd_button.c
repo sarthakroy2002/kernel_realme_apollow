@@ -13,7 +13,6 @@
 
 #include "tpd.h"
 
-/* #ifdef TPD_HAVE_BUTTON */
 /* static int tpd_keys[TPD_KEY_COUNT] = TPD_KEYS; */
 /* static int tpd_keys_dim[TPD_KEY_COUNT][4] = TPD_KEYS_DIM; */
 static unsigned int tpd_keycnt;
@@ -133,4 +132,3 @@ void tpd_button_setting(int keycnt, void *keys, void *keys_dim)
 	memcpy(tpd_keys_dim, keys_dim, keycnt * 4 * 4);
 }
 
-/* #endif */

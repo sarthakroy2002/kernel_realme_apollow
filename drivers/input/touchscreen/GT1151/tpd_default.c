@@ -17,4 +17,3 @@ int tpd_trembling_tolerance(int t, int p)
 	return 26;
 }
 
-/* #endif */

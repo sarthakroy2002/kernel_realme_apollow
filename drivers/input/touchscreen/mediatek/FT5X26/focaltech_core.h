@@ -298,7 +298,6 @@ struct fts_ts_data {
 /* #define CONFIG_TOUCHPANEL_PROXIMITY_SENSOR */
 /* #if FT_ESD_PROTECT */
 /* extern int apk_debug_flag; */
-/* #endif */
 
 extern struct i2c_client *fts_i2c_client;
 extern struct input_dev *fts_input_dev;
@@ -377,7 +376,6 @@ extern int FG_charging_status;
 #endif
 /* #if FT_ESD_PROTECT */
 extern int apk_debug_flag;
-/* #endif */
 /***********************************************************************
  * Static function prototypes
  ***********************************************************************/

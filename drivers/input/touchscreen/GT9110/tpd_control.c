@@ -303,7 +303,6 @@ static struct miscdevice tpd_misc_device = {
 };
 
 /* ********************************************** */
-/* #endif */
 
 
 /* function definitions */

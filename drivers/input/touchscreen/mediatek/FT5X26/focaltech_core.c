@@ -711,7 +711,6 @@ static ssize_t mtk_ctp_firmware_update_store(struct kobject *kobj,
 		TPD_DEBUG("%s\n", upgrade_file_path);
 		/* #if FT_ESD_PROTECT */
 		/* esd_switch(0);apk_debug_flag = 1; */
-		/* #endif */
 		disable_irq(fts_i2c_client->irq);
 		ret = fts_ctpm_fw_upgrade_with_app_file(fts_i2c_client,
 							upgrade_file_path);
@@ -727,7 +726,6 @@ static ssize_t mtk_ctp_firmware_update_store(struct kobject *kobj,
 		}
 		/* #if FT_ESD_PROTECT */
 		/* esd_switch(1);apk_debug_flag = 0; */
-		/* #endif */
 	} break;
 	/* case PROC_SET_TEST_FLAG: */
 
@@ -1545,7 +1543,6 @@ reset_proc:
 	msleep(20);
 	tpd_gpio_output(tpd_rst_gpio_number, 1);
 	msleep(400);
-/* #endif */
 
 /* FTS_DBG("********************hxh don't Enter CTP Auto */
 /* Upgrade********************\n"); */
@@ -1564,9 +1561,7 @@ reset_proc:
 	tpd_gpio_output(tpd_rst_gpio_number, 1);
 	msleep(400);
 #endif
-	/*#ifdef CONFIG_FT_AUTO_UPGRADE_SUPPORT*/
 	/*	tpd_auto_upgrade(client);*/
-	/*#endif*/
 	/* FTS_DBG("********************hxh rm report */
 	/* rate********************\n"); */
 	/* Set report rate 80Hz */
