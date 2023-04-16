@@ -30,11 +30,14 @@
 #include <mt-plat/upmu_common.h>
 #endif
 
+#ifdef CLKBUF_READY
+#include "mtk_clkbuf_ctl.h"
+#endif
+
 static void __iomem *ufs_mtk_mmio_base_gpio;
-static void __iomem *ufs_mtk_mmio_base_topckgen;
 static void __iomem *ufs_mtk_mmio_base_infracfg_ao;
-static void __iomem *ufs_mtk_mmio_base_apmixed;
 static void __iomem *ufs_mtk_mmio_base_ufs_mphy;
+static struct regulator *reg_va09;
 
 /**
  * ufs_mtk_pltfrm_pwr_change_final_gear - change pwr mode fianl gear value.
@@ -60,22 +63,23 @@ void random_delay(struct ufs_hba *hba)
 }
 void wdt_pmic_full_reset(struct ufs_hba *hba)
 {
-	ufshcd_disable_intr(hba, hba->intr_mask);
-
-	/* power off device VCC */
+	/*
+	 * Cmd issue to PMIC on MT6771 will take around 20us ~ 30us, in order
+	 * to speed up VEMC disable time, we disable VEMC first coz PMIC cold
+	 * reset may take longer to disable VEMC in it's reset flow. Can not
+	 * use regulator_disable() here because it can not use in  preemption
+	 * disabled context. Use pmic raw API without nlock instead.
+	 */
 	pmic_set_register_value_nolock(PMIC_RG_LDO_VEMC_EN, 0);
 
-	/* power off device VCCQ2 1.8V */
-	pmic_set_register_value_nolock(PMIC_RG_LDO_VUFS_EN, 0);
-
-	/* Disable VIO18 is to power off device VCCQ 1.2V, but
-	 * since this is an important power source. This will
-	 * cause PMIC shutdown. At this cause all of the power
-	 * will be shutdown instantly.
-	 *
-	 * Press power key or plug in USB to power up again.
+	/* Need reset external LDO for VUFS18, UFS needs VEMC&VUFS18 reset at
+	 * the same time
 	 */
-	pmic_set_register_value_nolock(PMIC_RG_LDO_VIO18_EN, 0);
+	pmic_set_register_value_nolock(PMIC_RG_STRUP_EXT_PMIC_SEL, 0x1);
+
+	/* VA09 off, may not require */
+	/* pmic_set_register_value_nolock(PMIC_RG_STRUP_EXT_PMIC_EN, 0x1); */
+	/* pmic_set_register_value_nolock(PMIC_RG_STRUP_EXT_PMIC_SEL, 0x2); */
 
 	/* PMIC cold reset */
 	pmic_set_register_value_nolock(PMIC_RG_CRST, 1);
@@ -87,47 +91,18 @@ void wdt_pmic_full_reset(struct ufs_hba *hba)
 void ufs_mtk_pltfrm_gpio_trigger_and_debugInfo_dump(struct ufs_hba *hba)
 {
 #ifdef UPMU_READY
-	int vcc_enabled, vcc_0_value, vcc_1_value;
-	int vccq2_enabled, va12_enabled;
-	u32 val_0, val_1;
+	int vcc_enabled, vcc_value, vccq2_enabled, va09_enabled;
 
-	/* check ufs debug register */
-	ufshcd_writel(hba, 0x20, REG_UFS_MTK_DEBUG_SEL);
-	val_0 = ufshcd_readl(hba, REG_UFS_MTK_PROBE);
-	dev_info(hba->dev, "REG_UFS_MTK_PROBE: 0x%x\n", val_0);
-
-	/* check power status */
 	vcc_enabled = pmic_get_register_value(PMIC_RG_LDO_VEMC_EN);
-	vcc_0_value = pmic_get_register_value(PMIC_RG_VEMC_VOSEL_0);
-	vcc_1_value = pmic_get_register_value(PMIC_RG_VEMC_VOSEL_1);
+	vcc_value = pmic_get_register_value(PMIC_RG_VEMC_VOSEL);
 	vccq2_enabled = pmic_get_register_value(PMIC_DA_EXT_PMIC_EN1);
-	va12_enabled = pmic_get_register_value(PMIC_RG_LDO_VA12_EN);
-	/* dump vcc, vccq2 info */
+	va09_enabled = pmic_get_register_value(PMIC_DA_EXT_PMIC_EN1);
+	/* dump vcc, vccq2 and va09 info */
 	dev_info(hba->dev,
-		"vcc_en:%d, vcc_0:%d, vcc_1:%d, vccq2_en:%d, va12_en:%d\n",
-		vcc_enabled, vcc_0_value, vcc_1_value,
-		vccq2_enabled, va12_enabled);
-
-	if (ufs_mtk_mmio_base_infracfg_ao) {
-		val_0 = readl(ufs_mtk_mmio_base_infracfg_ao + CLK_CG_2_STA);
-		val_1 = readl(ufs_mtk_mmio_base_infracfg_ao + CLK_CG_3_STA);
-		dev_info(hba->dev,
-			"infracfg_ao: CLK_CG_2_STA = 0x%x, CLK_CG_3_STA = 0x%x\n",
-			val_0, val_1);
-	}
-
-	if (ufs_mtk_mmio_base_apmixed) {
-		val_0 = readl(ufs_mtk_mmio_base_apmixed + PLL_MAINPLL);
-		val_1 = readl(ufs_mtk_mmio_base_apmixed + PLL_MSDCPLL);
-		dev_info(hba->dev, "apmixed: PLL_MAINPLL = 0x%x, PLL_MSDCPLL = 0x%x\n",
-			val_0, val_1);
-	}
-
-	if (ufs_mtk_mmio_base_topckgen) {
-		val_0 = readl(ufs_mtk_mmio_base_topckgen + CLK_CFG_12);
-		dev_info(hba->dev, "topckgen: CLK_CFG_12 = 0x%x\n",
-			val_0);
-	}
+		"vcc_enabled:%d, vcc_value:%d, vccq2_enabled:%d, va09:%d!!!\n",
+		vcc_enabled, vcc_value, vccq2_enabled, va09_enabled);
+	/* dump clock buffer */
+	clk_buf_dump_clkbuf_log();
 #endif
 }
 
@@ -138,12 +113,13 @@ struct device_node *msdc_gpio_node;
 void __iomem *msdc_gpio_base;
 static struct regulator *vmc;
 
-#define MSDC1_GPIO_MODE           (msdc_gpio_base + 0x360)
-#define MSDC1_GPIO_DIR             (msdc_gpio_base + 0x10)
-#define MSDC1_GPIO_DOUT            (msdc_gpio_base + 0x110)
+#define MSDC1_GPIO_MODE17           (msdc_gpio_base + 0x410)
+#define MSDC1_GPIO_DIR4             (msdc_gpio_base + 0x40)
+#define MSDC1_GPIO_DOUT4            (msdc_gpio_base + 0x140)
 
-#define MSDC1_GPIO_DOUT_DIR_FIELD   (0x01F00000)
-#define MSDC1_GPIO_DOUT_DIR_VAL_SET (0x0000001F)
+#define MSDC1_GPIO_DOUT             (MSDC1_GPIO_DOUT4)
+#define MSDC1_GPIO_DOUT_DIR_FIELD   (0x00000F00)
+#define MSDC1_GPIO_DOUT_DIR_VAL_SET (0x0000000F)
 #define MSDC1_GPIO_DOUT_DIR_VAL_CLR (0x00000000)
 
 #define MSDC_READ32(reg)          __raw_readl(reg)
@@ -216,13 +192,12 @@ void ufs_mtk_pltfrm_gpio_trigger_init(struct ufs_hba *hba)
 	 * Be sure remove msdc_set_pin_mode in msdc_cust.c set mode
 	 * back to msdc.
 	 */
-	MSDC_SET_FIELD(MSDC1_GPIO_MODE, 0xFFFF0000, 0x0);
-	MSDC_SET_FIELD(MSDC1_GPIO_MODE + 0x10, 0x0000000F, 0x0);
+	MSDC_SET_FIELD(MSDC1_GPIO_MODE17, 0x0000FFFF, 0x0);
 
 	/*
 	 * Set gpio dir output. (dat0/dat1/dat2/dat3 in GPIO)
 	 */
-	MSDC_SET_FIELD(MSDC1_GPIO_DIR,
+	MSDC_SET_FIELD(MSDC1_GPIO_DIR4,
 		MSDC1_GPIO_DOUT_DIR_FIELD,
 		MSDC1_GPIO_DOUT_DIR_VAL_SET);
 
@@ -260,8 +235,8 @@ void ufs_mtk_pltfrm_gpio_trigger(int value)
 	pr_info("%s vmc=%d uv\n", __func__, regulator_get_voltage(vmc));
 
 	pr_info("%s mode=0x%x, dir=0x%x, out=0x%x\n", __func__,
-		MSDC_READ32(MSDC1_GPIO_MODE),
-		MSDC_READ32(MSDC1_GPIO_DIR),
+		MSDC_READ32(MSDC1_GPIO_MODE17),
+		MSDC_READ32(MSDC1_GPIO_DIR4),
 		MSDC_READ32(MSDC1_GPIO_DOUT));
 }
 #endif
@@ -269,7 +244,6 @@ void ufs_mtk_pltfrm_gpio_trigger(int value)
 int ufs_mtk_pltfrm_xo_ufs_req(struct ufs_hba *hba, bool on)
 {
 	u32 value;
-	int retry;
 
 	if (!hba->card) {
 		/*
@@ -282,10 +256,6 @@ int ufs_mtk_pltfrm_xo_ufs_req(struct ufs_hba *hba, bool on)
 			__func__);
 		return 0;
 	}
-
-	/* inform ATF clock is on */
-	if (on)
-		mt_secure_call(MTK_SIP_KERNEL_UFS_CTL, 8, 1, 0, 0);
 
 	/*
 	 * Delay before disable ref-clk: H8 -> delay A -> disable ref-clk
@@ -311,37 +281,12 @@ int ufs_mtk_pltfrm_xo_ufs_req(struct ufs_hba *hba, bool on)
 		}
 	}
 
-	/*
-	 * REG_UFS_ADDR_XOUFS_ST[0] is xoufs_req_s
-	 * REG_UFS_ADDR_XOUFS_ST[1] is xoufs_ack_s
-	 * xoufs_req_s is used for XOUFS Clock request to SPI
-	 * SW set xoufs_ack_s to trigger Clock Request for XOUFS, and
-	 * check xoufs_ack_s set for clock avialable.
-	 * SW clear xoufs_ack_s to trigger Clock Release for XOUFS, and
-	 * check xoufs_ack_s clear for clock off.
-	 */
-
-	if (on)
-		ufshcd_writel(hba, 1, REG_UFS_ADDR_XOUFS_ST);
-	else
-		ufshcd_writel(hba, 0, REG_UFS_ADDR_XOUFS_ST);
-
-	retry = 3; /* 2.4ms wosrt case */
-	do {
-		value = ufshcd_readl(hba, REG_UFS_ADDR_XOUFS_ST);
-
-		if ((value == 0x3) || (value == 0))
-			break;
-
-		mdelay(1);
-		if (retry) {
-			retry--;
-		} else {
-			dev_err(hba->dev, "XO_UFS ack failed\n");
-			return -EIO;
-		}
-	} while (1);
-
+	if (on) {
+		clk_buf_ctrl(CLK_BUF_UFS, true);
+	} else {
+		clk_buf_ctrl(CLK_BUF_UFS, false);
+		spm_resource_req(SPM_RESOURCE_USER_UFS, SPM_RESOURCE_RELEASE);
+	}
 
 	/* Delay after enable ref-clk: enable ref-clk -> delay B -> leave H8
 	 *		delayB
@@ -365,10 +310,6 @@ int ufs_mtk_pltfrm_xo_ufs_req(struct ufs_hba *hba, bool on)
 			break;
 		}
 	}
-
-	/* inform ATF clock is off */
-	if (!on)
-		mt_secure_call(MTK_SIP_KERNEL_UFS_CTL, 8, 0, 0, 0);
 
 	return 0;
 }
@@ -461,7 +402,7 @@ out:
  */
 int ufs_mtk_pltfrm_deepidle_check_h8(void)
 {
-	/* No Need for MT6885 */
+	/* No Need for MT6785 */
 	return 0;
 }
 
@@ -471,7 +412,7 @@ int ufs_mtk_pltfrm_deepidle_check_h8(void)
  */
 void ufs_mtk_pltfrm_deepidle_leave(void)
 {
-	/* No Need for MT6885 */
+	/* No Need for MT6785 */
 }
 
 /**
@@ -481,7 +422,7 @@ void ufs_mtk_pltfrm_deepidle_leave(void)
  */
 void ufs_mtk_pltfrm_deepidle_lock(struct ufs_hba *hba, bool lock)
 {
-	/* No Need for MT6885 */
+	/* No Need for MT6785 */
 }
 
 int ufs_mtk_pltfrm_host_sw_rst(struct ufs_hba *hba, u32 target)
@@ -577,10 +518,7 @@ int ufs_mtk_pltfrm_host_sw_rst(struct ufs_hba *hba, u32 target)
 
 int ufs_mtk_pltfrm_init(void)
 {
-	struct ufs_mtk_host *host = ufshcd_get_variant(ufs_mtk_hba);
-
 	ufs_mtk_hba->caps |= UFSHCD_CAP_CLK_GATING;
-	host->vreg_lpm_supported = true;
 
 	return 0;
 }
@@ -590,9 +528,6 @@ int ufs_mtk_pltfrm_parse_dt(struct ufs_hba *hba)
 	struct device_node *node_gpio;
 	struct device_node *node_ufs_mphy;
 	struct device_node *node_infracfg_ao;
-	struct device_node *node_apmixed;
-	struct device_node *node_topckgen;
-
 	int err = 0;
 
 	/* get ufs_mtk_gpio */
@@ -640,80 +575,174 @@ int ufs_mtk_pltfrm_parse_dt(struct ufs_hba *hba)
 	} else
 		dev_err(hba->dev, "error: ufs_mtk_mmio_base_infracfg_ao init fail\n");
 
-	/* get ufs_mtk_mmio_base_apmixed */
-	node_apmixed =
-		of_find_compatible_node(NULL, NULL, "mediatek,apmixed");
-	if (node_apmixed) {
-		ufs_mtk_mmio_base_apmixed = of_iomap(node_apmixed, 0);
-
-		if (IS_ERR(*(void **)&ufs_mtk_mmio_base_apmixed)) {
-			err = PTR_ERR(*(void **)&ufs_mtk_mmio_base_apmixed);
-			dev_info(hba->dev, "error: ufs_mtk_mmio_base_apmixed init fail\n");
-			ufs_mtk_mmio_base_apmixed = NULL;
-		}
-	} else
-		dev_info(hba->dev, "error: ufs_mtk_mmio_base_apmixed init fail\n");
-
-	/* get ufs_mtk_mmio_base_topckgen */
-	node_topckgen =
-		of_find_compatible_node(NULL, NULL, "mediatek,topckgen");
-	if (node_topckgen) {
-		ufs_mtk_mmio_base_topckgen = of_iomap(node_topckgen, 0);
-
-		if (IS_ERR(*(void **)&ufs_mtk_mmio_base_topckgen)) {
-			err = PTR_ERR(*(void **)&ufs_mtk_mmio_base_topckgen);
-			dev_info(hba->dev, "error: ufs_mtk_mmio_base_topckgen init fail\n");
-			ufs_mtk_mmio_base_topckgen = NULL;
-		}
-	} else
-		dev_info(hba->dev, "error: ufs_mtk_mmio_base_topckgen init fail\n");
+	/* get va09 regulator and enable it */
+	reg_va09 = regulator_get(hba->dev, "va09");
+	if (!reg_va09) {
+		dev_info(hba->dev, "%s: get va09 fail!!!\n", __func__);
+		return -EINVAL;
+	}
+	err = regulator_enable(reg_va09);
+	if (err < 0) {
+		dev_info(hba->dev, "%s: enalbe va09 fail, err = %d\n",
+			__func__, err);
+		return err;
+	}
 
 	return err;
 }
 
 int ufs_mtk_pltfrm_resume(struct ufs_hba *hba)
 {
-	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 	int ret = 0;
+	u32 reg;
 
-	/*
-	 * If the UFSHCD_CAP_CLK_GATING is not set,
-	 * platform pm needs to handle the ref_clk itself.
-	 */
-	if (!ufshcd_is_clkgating_allowed(hba)) {
-		ret = ufs_mtk_pltfrm_xo_ufs_req(hba, true);
-		if (ret)
-			goto out;
-		ret = ufs_mtk_perf_setup(host, true);
-		if (ret)
-			goto out;
+#ifdef CLKBUF_READY
+	/* Enable MPHY 26MHz ref clock */
+	clk_buf_ctrl(CLK_BUF_UFS, true);
+	ufshcd_writel(hba, 0, REG_UFS_ADDR_XOUFS_ST);
+#endif
+	/* Set regulator to turn on VA09 LDO */
+	ret = regulator_enable(reg_va09);
+	if (ret < 0) {
+		dev_info(hba->dev,
+			"%s: enalbe va09 fail, err = %d\n", __func__, ret);
+		return ret;
 	}
-out:
+
+	/* wait 200 us to stablize VA09 */
+	udelay(200);
+
+	/* Step 1: Set RG_VA09_ON to 1 */
+	mt_secure_call(MTK_SIP_KERNEL_UFS_CTL, 1, 1, 0, 0);
+
+	/* Step 2: release DA_MP_PLL_PWR_ON */
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+	reg = reg | (0x1 << 11);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+	reg = reg & ~(0x1 << 10);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+
+	/* Step 3: release DA_MP_PLL_ISO_EN */
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+	reg = reg & ~(0x1 << 9);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+	reg = reg & ~(0x1 << 8);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+
+	/* Step 4: release DA_MP_CDR_PWR_ON */
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+	reg = reg | (0x1 << 18);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+	reg = reg & ~(0x1 << 17);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+
+	/* Step 5: release DA_MP_CDR_ISO_EN */
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+	reg = reg & ~(0x1 << 20);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+	reg = reg & ~(0x1 << 19);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+
+	/* Step 6: release DA_MP_RX0_SQ_EN */
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xA0AC);
+	reg = reg | (0x1 << 1);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xA0AC);
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xA0AC);
+	reg = reg & ~(0x1);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xA0AC);
+
+	/* Delay 1us to wait DIFZ stable */
+	udelay(1);
+
+	/* Step 7: release DIFZ */
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xA09C);
+	reg = reg & ~(0x1 << 18);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xA09C);
+
 	return ret;
 }
 
 int ufs_mtk_pltfrm_suspend(struct ufs_hba *hba)
 {
-	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 	int ret = 0;
+	u32 reg;
 
-	/*
-	 * If the UFSHCD_CAP_CLK_GATING is not set,
-	 * platform pm needs to handle the ref_clk itself.
-	 */
-	if (!ufshcd_is_clkgating_allowed(hba)) {
-		ret = ufs_mtk_perf_setup(host, false);
-		if (ret)
-			goto out;
-		ret = ufs_mtk_pltfrm_xo_ufs_req(hba, false);
-		if (ret)
-			goto out;
+	/* Step 1: force DIFZ */
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xA09C);
+	reg = reg | (0x1 << 18);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xA09C);
+
+	/* Step 2: force DA_MP_RX0_SQ_EN */
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xA0AC);
+	reg = reg | (0x1);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xA0AC);
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xA0AC);
+	reg = reg & ~(0x1 << 1);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xA0AC);
+
+	/* Step 3: force DA_MP_CDR_ISO_EN */
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+	reg = reg | (0x1 << 19);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+	reg = reg | (0x1 << 20);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+
+	/* Step 4: force DA_MP_CDR_PWR_ON */
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+	reg = reg | (0x1 << 17);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+	reg = reg & ~(0x1 << 18);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0xB044);
+
+	/* Step 5: force DA_MP_PLL_ISO_EN */
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+	reg = reg | (0x1 << 8);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+	reg = reg | (0x1 << 9);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+
+	/* Step 6: force DA_MP_PLL_PWR_ON */
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+	reg = reg | (0x1 << 10);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+	reg = readl(ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+	reg = reg & ~(0x1 << 11);
+	writel(reg, ufs_mtk_mmio_base_ufs_mphy + 0x008C);
+
+	/* Step 7: Set RG_VA09_ON to 0 */
+	mt_secure_call(MTK_SIP_KERNEL_UFS_CTL, 1, 0, 0, 0);
+
+	/* delay awhile to satisfy T_HIBERNATE */
+	mdelay(15);
+
+#ifdef CLKBUF_READY
+	/* Disable MPHY 26MHz ref clock in H8 mode */
+	clk_buf_ctrl(CLK_BUF_UFS, false);
+	ufshcd_writel(hba, 0, REG_UFS_ADDR_XOUFS_ST);
+#endif
+	if (ufs_mtk_hba->curr_dev_pwr_mode != UFS_ACTIVE_PWR_MODE)
+		spm_resource_req(SPM_RESOURCE_USER_UFS, SPM_RESOURCE_RELEASE);
+
+	/* Set regulator to turn off VA09 LDO */
+	ret = regulator_disable(reg_va09);
+	if (ret < 0) {
+		dev_info(hba->dev,
+			"%s: disalbe va09 fail, err = %d\n",
+			__func__, ret);
+		return ret;
 	}
 #if 0
 	/* TEST ONLY: emulate UFSHCI power off by HCI SW reset */
 	ufs_mtk_pltfrm_host_sw_rst(hba, SW_RST_TARGET_UFSHCI);
 #endif
-out:
+
 	return ret;
 }
 
